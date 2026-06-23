@@ -1,0 +1,20 @@
+# 不要提交编译产物和系统文件
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+env/
+
+# VS Code 设置（每个人的编辑器配置不同）
+.vscode/
+
+# 不要大文件
+*.zip
+*.tar.gz
+*.rar
+*.mp4
+*.avi
+*.bag
