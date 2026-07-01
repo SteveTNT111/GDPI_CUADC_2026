@@ -1,0 +1,32 @@
+<launch>
+  <!-- 功能开关 -->
+  <arg name="fps" default="30" />
+  <arg name="enable_geopose" default="false" />
+  <arg name="yolo_model_path" default="/home/lab/model/best.pt" />
+  <arg name="yolo_device" default="cpu" />
+
+  <!-- 1. D435i 相机 -->
+  <node pkg="cuadc_vision"
+        type="camera_node.py"
+        name="camera_node"
+        output="screen">
+    <param name="fps" value="$(arg fps)" />
+  </node>
+
+  <!-- 2. YOLO 检测 -->
+  <node pkg="cuadc_vision"
+        type="detector_node.py"
+        name="detector_node"
+        output="screen">
+    <param name="model_path" value="$(arg yolo_model_path)" />
+    <param name="device" value="$(arg yolo_device)" />
+  </node>
+
+  <!-- 3. 大地坐标变换（需 MAVROS） -->
+  <group if="$(arg enable_geopose)">
+    <node pkg="cuadc_vision"
+          type="geopose_node.py"
+          name="geopose_node"
+          output="screen" />
+  </group>
+</launch>

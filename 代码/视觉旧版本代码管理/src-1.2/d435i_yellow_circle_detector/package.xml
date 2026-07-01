@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>d435i_yellow_circle_detector</name>
+  <version>0.1.0</version>
+  <description>ROS Noetic nodes for Intel RealSense D435i image publishing and yellow circle detection.</description>
+  <maintainer email="cuadc@example.com">cuadc</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>message_generation</build_depend>
+  <build_depend>rospy</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>cv_bridge</build_depend>
+  <build_depend>image_transport</build_depend>
+
+  <exec_depend>message_runtime</exec_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>image_transport</exec_depend>
+
+  <export/>
+</package>

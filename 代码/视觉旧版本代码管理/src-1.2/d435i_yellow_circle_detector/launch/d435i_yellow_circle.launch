@@ -1,0 +1,49 @@
+<launch>
+  <arg name="show_window" default="false" />
+  <arg name="fps" default="45" />
+  <arg name="display_scale" default="1.0" />
+
+  <node pkg="d435i_yellow_circle_detector"
+        type="d435i_camera_node.py"
+        name="d435i_camera_node"
+        output="screen">
+    <param name="color_width" value="640" />
+    <param name="color_height" value="480" />
+    <param name="depth_width" value="640" />
+    <param name="depth_height" value="480" />
+    <param name="fps" value="$(arg fps)" />
+    <param name="color_format" value="bgr8" />
+    <param name="wait_timeout_ms" value="5000" />
+    <param name="timeout_restart_count" value="3" />
+    <param name="auto_profile_fallback" value="true" />
+    <param name="align_depth_to_color" value="true" />
+    <param name="frame_id" value="d435i_color_optical_frame" />
+    <param name="color_topic" value="/d435i/color/image_raw" />
+    <param name="depth_topic" value="/d435i/aligned_depth/image_raw" />
+  </node>
+
+  <node pkg="d435i_yellow_circle_detector"
+        type="yellow_circle_detector.py"
+        name="yellow_circle_detector"
+        output="screen">
+    <param name="color_topic" value="/d435i/color/image_raw" />
+    <param name="depth_topic" value="/d435i/aligned_depth/image_raw" />
+    <param name="result_topic" value="/yellow_circle" />
+    <param name="annotated_topic" value="/yellow_circle/annotated_image" />
+
+    <param name="h_min" value="18" />
+    <param name="h_max" value="42" />
+    <param name="s_min" value="80" />
+    <param name="s_max" value="255" />
+    <param name="v_min" value="80" />
+    <param name="v_max" value="255" />
+
+    <param name="min_area" value="120.0" />
+    <param name="max_area" value="200000.0" />
+    <param name="min_radius" value="6.0" />
+    <param name="min_circularity" value="0.55" />
+    <param name="center_roi_ratio" value="0.85" />
+    <param name="show_window" value="$(arg show_window)" />
+    <param name="display_scale" value="$(arg display_scale)" />
+  </node>
+</launch>

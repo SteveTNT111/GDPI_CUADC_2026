@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=D435i YellowCircle Record
+Comment=Run D435i yellow circle detector and save image dataset
+Exec=bash -lc "bash $HOME/uav_ws/src/d435i_yellow_circle_detector/scripts/start_d435i_record.sh"
+Icon=camera-photo
+Terminal=true
+Categories=Development;Science;
+StartupNotify=false

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=D435i Camera
+Comment=Run D435i camera node
+Exec=bash -lc "bash $HOME/d435i_ws/src/d435i_yellow_circle_detector/scripts/start_d435i_record.sh"
+Icon=camera-photo
+Terminal=true
+Categories=Development;Science;
+StartupNotify=false

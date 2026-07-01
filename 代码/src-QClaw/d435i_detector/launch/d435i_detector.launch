@@ -1,0 +1,26 @@
+<launch>
+  <!-- D435i 相机驱动节点 -->
+  <node pkg="d435i_detector" type="d435i_publisher.py" name="d435i_publisher" output="screen">
+    <param name="fps"           value="30" />
+    <param name="color_width"   value="640" />
+    <param name="color_height"  value="480" />
+    <param name="depth_width"   value="640" />
+    <param name="depth_height"  value="480" />
+    <param name="enable_align"  value="true" />
+  </node>
+
+  <!-- 黄色圆检测节点 -->
+  <node pkg="d435i_detector" type="yellow_detector.py" name="yellow_detector" output="screen">
+    <!-- HSV 黄色范围（可根据实际场景调参） -->
+    <param name="h_min"              value="20" />
+    <param name="h_max"              value="40" />
+    <param name="s_min"              value="80" />
+    <param name="s_max"              value="255" />
+    <param name="v_min"              value="80" />
+    <param name="v_max"              value="255" />
+    <param name="min_area"           value="200" />
+    <param name="circularity_thresh" value="0.6" />
+    <param name="depth_scale"        value="0.001" />
+    <param name="show_window"        value="true" />
+  </node>
+</launch>

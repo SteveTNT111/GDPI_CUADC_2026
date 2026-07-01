@@ -1,0 +1,115 @@
+<launch>
+  <arg name="show_window" default="false" />
+  <arg name="fps" default="30" />
+  <arg name="display_scale" default="1.0" />
+  <arg name="enable_record" default="false" />
+  <arg name="record_dir" default="$(env HOME)/yellow_circle_records" />
+  <arg name="record_fps" default="$(arg fps)" />
+
+  <node pkg="d435i_yellow_circle_detector"
+        type="d435i_camera_node.py"
+        name="d435i_camera_node"
+        output="screen">
+    <param name="color_width" value="640" />
+    <param name="color_height" value="480" />
+    <param name="depth_width" value="640" />
+    <param name="depth_height" value="480" />
+    <param name="fps" value="$(arg fps)" />
+    <param name="color_format" value="bgr8" />
+    <param name="wait_timeout_ms" value="5000" />
+    <param name="timeout_restart_count" value="3" />
+    <param name="auto_profile_fallback" value="true" />
+    <param name="align_depth_to_color" value="true" />
+    <param name="frame_id" value="d435i_color_optical_frame" />
+    <param name="color_topic" value="/d435i/color/image_raw" />
+    <param name="depth_topic" value="/d435i/aligned_depth/image_raw" />
+  </node>
+
+  <node pkg="d435i_yellow_circle_detector"
+        type="yellow_binarizer_node.py"
+        name="yellow_binarizer_node"
+        output="screen">
+    <param name="color_topic" value="/d435i/color/image_raw" />
+    <param name="binary_topic" value="/yellow_circle/binary_image" />
+
+    <param name="h_min" value="18" />
+    <param name="h_max" value="42" />
+    <param name="s_min" value="80" />
+    <param name="s_max" value="255" />
+    <param name="v_min" value="80" />
+    <param name="v_max" value="255" />
+
+    <param name="morph_kernel" value="5" />
+    <param name="morph_open_iterations" value="1" />
+    <param name="morph_close_iterations" value="2" />
+  </node>
+
+  <node pkg="d435i_yellow_circle_detector"
+        type="yellow_circle_detector_node.py"
+        name="yellow_circle_detector_node"
+        output="screen">
+    <param name="color_topic" value="/d435i/color/image_raw" />
+    <param name="binary_topic" value="/yellow_circle/binary_image" />
+    <param name="depth_topic" value="/d435i/aligned_depth/image_raw" />
+    <param name="result_topic" value="/yellow_circle" />
+    <param name="annotated_topic" value="/yellow_circle/annotated_image" />
+
+    <param name="min_area" value="120.0" />
+    <param name="max_area" value="200000.0" />
+    <param name="min_radius" value="6.0" />
+    <param name="min_circularity" value="0.55" />
+    <param name="center_roi_ratio" value="0.85" />
+  </node>
+
+  <group if="$(arg show_window)">
+    <node pkg="d435i_yellow_circle_detector"
+          type="annotated_image_viewer_node.py"
+          name="annotated_image_viewer_node"
+          output="screen">
+      <param name="image_topic" value="/yellow_circle/annotated_image" />
+      <param name="window_name" value="yellow_circle_detector" />
+      <param name="display_scale" value="$(arg display_scale)" />
+    </node>
+
+    <node pkg="d435i_yellow_circle_detector"
+          type="binary_image_viewer_node.py"
+          name="binary_image_viewer_node"
+          output="screen">
+      <param name="image_topic" value="/yellow_circle/binary_image" />
+      <param name="window_name" value="yellow_binary" />
+      <param name="display_scale" value="$(arg display_scale)" />
+    </node>
+  </group>
+
+  <group if="$(arg enable_record)">
+    <node pkg="d435i_yellow_circle_detector"
+          type="raw_video_recorder_node.py"
+          name="raw_video_recorder_node"
+          output="screen">
+      <param name="image_topic" value="/d435i/color/image_raw" />
+      <param name="record_dir" value="$(arg record_dir)" />
+      <param name="record_fps" value="$(arg record_fps)" />
+      <param name="filename_prefix" value="yellow_circle_raw" />
+    </node>
+
+    <node pkg="d435i_yellow_circle_detector"
+          type="annotated_video_recorder_node.py"
+          name="annotated_video_recorder_node"
+          output="screen">
+      <param name="image_topic" value="/yellow_circle/annotated_image" />
+      <param name="record_dir" value="$(arg record_dir)" />
+      <param name="record_fps" value="$(arg record_fps)" />
+      <param name="filename_prefix" value="yellow_circle_annotated" />
+    </node>
+
+    <node pkg="d435i_yellow_circle_detector"
+          type="binary_video_recorder_node.py"
+          name="binary_video_recorder_node"
+          output="screen">
+      <param name="image_topic" value="/yellow_circle/binary_image" />
+      <param name="record_dir" value="$(arg record_dir)" />
+      <param name="record_fps" value="$(arg record_fps)" />
+      <param name="filename_prefix" value="yellow_circle_binary" />
+    </node>
+  </group>
+</launch>

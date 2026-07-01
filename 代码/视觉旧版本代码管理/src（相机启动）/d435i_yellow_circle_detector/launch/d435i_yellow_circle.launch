@@ -1,0 +1,23 @@
+<launch>
+  <arg name="fps" default="30" />
+
+  <node pkg="d435i_yellow_circle_detector"
+        type="d435i_camera_node.py"
+        name="d435i_camera_node"
+        output="screen">
+    <param name="color_width" value="640" />
+    <param name="color_height" value="480" />
+    <param name="depth_width" value="640" />
+    <param name="depth_height" value="480" />
+    <param name="fps" value="$(arg fps)" />
+    <param name="color_format" value="bgr8" />
+    <param name="wait_timeout_ms" value="5000" />
+    <param name="timeout_restart_count" value="3" />
+    <param name="auto_profile_fallback" value="true" />
+    <param name="align_depth_to_color" value="true" />
+    <param name="frame_id" value="d435i_color_optical_frame" />
+    <param name="color_topic" value="/d435i/color/image_raw" />
+    <param name="depth_topic" value="/d435i/aligned_depth/image_raw" />
+    <param name="camera_info_topic" value="/d435i/color/camera_info" />
+  </node>
+</launch>
