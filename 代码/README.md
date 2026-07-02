@@ -8,42 +8,56 @@
 
 ```
 代码/
-├── README.md                              # 你正在看的
-├── cuadc_src/                             # 🔒 主功能包（伍尚京维护，其他人不要动）
-│   ├── scripts/                           #   核心 Python 节点
-│   │   ├── main.py                        #     主控：状态机 + 飞行模式切换 + 起飞指令
-│   │   ├── servo_test.py                  #     舵机测试：MAVROS 控制 5/6 通道抛投器
-│   │   ├── camera_node.py                 #     D435i 相机驱动
-│   │   ├── detector_node.py               #     目标检测（YOLO + 传统CV）
-│   │   └── geopose_node.py               #     坐标变换（相机→机体→ENU→大地）
-│   ├── launch/                            #   启动文件
-│   │   ├── cuadc_run.launch               #     主启动：一键启动全部节点
-│   │   └── run_servo_test.launch          #     舵机测试终端（手动 on/off）
-│   ├── config/                            #   参数文件
+├── README.md                                    # 你正在看的
+│
+├── cuadc_src/                                   # 🔒 主功能包（伍尚京维护，其他人不要动）
+│   ├── scripts/                                 #   核心 Python 节点
+│   │   ├── main.py                              #     主控：状态机 + 飞行模式切换 + 起飞指令
+│   │   ├── servo_test.py                        #     舵机测试：MAVROS 控制 5/6 通道抛投器
+│   │   ├── camera_node.py                       #     D435i 相机驱动
+│   │   ├── detector_node.py                     #     目标检测（YOLO + 传统CV）
+│   │   └── geopose_node.py                     #     坐标变换（相机→机体→ENU→大地）
+│   ├── launch/                                  #   启动文件
+│   │   ├── run_main.launch                      #     总启动：主控 + 相机 + YOLO + 坐标变换
+│   │   ├── cuadc_run.launch                     #     视觉管线启动（相机 + 检测 + geopose）
+│   │   └── run_servo_test.launch               #     舵机测试终端（手动 on/off）
+│   ├── config/                                  #   参数文件
 │   │   └── params.yaml
-│   ├── msg/                               #   自定义 ROS 消息
+│   ├── msg/                                     #   自定义 ROS 消息
 │   │   ├── GeoTarget.msg
 │   │   ├── YoloDetection.msg
 │   │   └── YoloDetections.msg
-│   ├── models/                            #   仿真模型
+│   ├── models/                                  #   仿真模型
 │   ├── CMakeLists.txt
 │   ├── package.xml
 │   └── README.md
 │
-├── 视觉原始版本存档/                        # 视觉组交付物（多版本迭代记录，参考用）
-├── NUC修复/                               # NUC 上 Claude Code 修复的代码（按日期+NUC编号）
-│   ├── src-1.0/ 到 src-4.4/              #   YOLO + 黄色圆检测各版本
-│   └── src最新版本/                        #   当前最可用版本
+├── 视觉组独立完成的部分（对应src4.4）/           # ★ 视觉组最新交付：YOLO + 大地坐标变换
+│   ├── CODE_EXPLANATION.md                      #   完整架构说明与节点详解
+│   ├── RUN_COMMANDS.md                          #   常用运行命令快速参考
+│   └── d435i_yellow_circle_detector/            #   ROS 功能包（可直接放 NUC 编译）
 │
-├── src-QClaw/                             # D435i 检测器 ROS 包（参考）
+├── d435i_yellow_circle_detector（对应src4.3.1）/ # 旧版视觉包（有 YOLO，无 geopose，待删除）
 │
-├── 识别圆筒的yolov8权重文件/               # YOLO 模型
+├── 视觉组旧版本代码管理/                         # 视觉组全部迭代版本存档（参考用）
+│   ├── src-1.0/ 到 src-1.2/                    #   基础黄色圆检测
+│   ├── src2.0/ 到 src2.1/                      #   增加二值化
+│   ├── src3.0/ 到 src3.4/                      #   增加录制/采集/桌面脚本
+│   ├── src4.0/ 到 src4.3.1/                    #   增加 YOLO + 比赛任务
+│   ├── src4.4(显示假的大地坐标)/                #   增加大地坐标（← 新版来源）
+│   └── src（相机启动）/                         #   最简相机启动版本
+│
+├── src-QClaw/                                   # D435i 检测器 ROS2 包（参考）
+│   ├── d435i_detector/                          #   ROS2 版本（setup.py）
+│   └── src-1.1(最可用，30FPS）/                  #   ROS1 版本副本（与旧版存档重复）
+│
+├── 识别圆筒的yolov8权重文件/                     # YOLO 模型
 │   └── best.pt
 │
-└── （队员代码文件夹）                       # 见下方规则
-    ├── 你的名字/                           #   用你的名字或功能命名
-    │   ├── 代码文件.py                     #     能跑的代码
-    │   └── 代码文件.md                     #     同名说明文档
+└── （队员代码文件夹）                            # 见下方规则
+    ├── 你的名字/                                 #   用你的名字或功能命名
+    │   ├── 代码文件.py                           #     能跑的代码
+    │   └── 代码文件.md                           #     同名说明文档
     └── ...
 ```
 
@@ -57,11 +71,19 @@
 
 | 脚本 | 功能 | 运行方式 |
 |------|------|---------|
-| `main.py` | 状态机主控：切换飞行模式 → 起飞 → 巡航 → 识别 → 对准 → 投放 → 返航 | `roslaunch cuadc_src cuadc_run.launch` |
-| `servo_test.py` | 舵机测试：终端输入 `on`/`off` 控制 5/6 通道 PWM（1100/1400） | `roslaunch cuadc_src run_servo_test.launch` |
-| `camera_node.py` | D435i 驱动，发布 RGB + 深度图 | 由 cuadc_run.launch 自动启动 |
-| `detector_node.py` | YOLO + 传统CV 检测，发布目标位置 | 由 cuadc_run.launch 自动启动 |
-| `geopose_node.py` | 相机系 → 机体 → ENU → 大地坐标变换 | 由 cuadc_run.launch 自动启动 |
+| `main.py` | 状态机主控：切换飞行模式 → 起飞 → 巡航 → 识别 → 对准 → 投放 → 返航 | `roslaunch cuadc_vision run_main.launch` |
+| `servo_test.py` | 舵机测试：终端输入 `on`/`off` 控制 5/6 通道 PWM（1100/1400） | `roslaunch cuadc_vision run_servo_test.launch` |
+| `camera_node.py` | D435i 驱动，发布 RGB + 深度图 | 由 run_main.launch 或 cuadc_run.launch 自动启动 |
+| `detector_node.py` | YOLO + 传统CV 检测，发布目标位置 | 由 run_main.launch 或 cuadc_run.launch 自动启动 |
+| `geopose_node.py` | 相机系 → 机体 → ENU → 大地坐标变换 | 由 run_main.launch 自动启动（可选） |
+
+### 启动文件说明
+
+| 启动文件 | 包含节点 | 用途 |
+|---------|---------|------|
+| `run_main.launch` | main + camera + detector + geopose | **总启动**：完整比赛流程一键启动 |
+| `cuadc_run.launch` | camera + detector + geopose | 仅视觉管线（不含主控） |
+| `run_servo_test.launch` | servo_test | 舵机独立测试终端 |
 
 ### 舵机说明
 

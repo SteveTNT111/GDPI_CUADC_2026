@@ -22,10 +22,10 @@
 | 机载电脑 | Intel NUC ×3 + Ubuntu 20.04 + ROS Noetic | ✅ |
 | 深度相机 | Intel RealSense D435i | ✅ |
 | 目标检测 | YOLOv8 + 传统CV（黄色圆检测） | ✅ |
-| 控制 | MAVROS + AP Guided 模式 setpoint | 🔄 |
+| 飞行控制 | MAVROS + ArduPilot Guided 模式 | ✅ |
 | 仿真 | AP SITL + Gazebo Classic | ✅ |
-| 舵机投放 | MAVROS 舵机指令 | ✅ |
-| 坐标变换 | 相机系 → 机体 → ENU → 大地 | 🔄 |
+| 舵机投放 | MAVROS 舵机 PWM 控制 | ✅ |
+| 坐标变换 | 相机系 → 机体 → ENU → WGS84 大地坐标 | ✅ |
 
 ---
 
@@ -33,29 +33,38 @@
 
 ```
 GDPI_CUADC_2026/
-├── README.md                         # 你正在看的（会持续更新）
-├── 备赛文档/                          # 项目规划与管理
-│   ├── 00_备赛计划.md                 #   总体时间线与目标
-│   ├── 01_队伍分工.md                 #   人员与职责
-│   ├── 02_进度追踪.md                 #   每日进展记录
-│   ├── 03_参考仓库.md                 #   开源参考仓库与视频链接
-│   ├── 04_学习任务与能力考核.md        #   队员学习路径
-│   ├── 06_系统程序架构.md              #   ROS 节点设计与状态机
-│   ├── 07_工程规范.md                 #   代码提交与文档规范
-│   ├── Git使用指南-VSCode图形界面.md   #   不会命令行的看这个
-│   ├── 动力套装选型/                   #   电机/桨/电池力效分析
+├── README.md                               # 你正在看的
+├── 备赛文档/                                # 项目规划与管理
+│   ├── 00_备赛计划.md                       #   总体时间线与目标
+│   ├── 01_队伍分工.md                       #   人员与职责
+│   ├── 02_进度追踪.md                       #   每日进展记录
+│   ├── 03_参考仓库.md                       #   开源参考仓库与视频链接
+│   ├── 04_学习任务与能力考核.md              #   队员学习路径
+│   ├── 06_系统程序架构.md                    #   ROS 节点设计与状态机
+│   ├── 07_工程规范.md                       #   代码提交与文档规范
+│   ├── Git使用指南-VSCode图形界面.md         #   不会命令行的看这个
+│   ├── 动力套装选型/                         #   电机/桨/电池力效分析
 │   │   ├── 飞机重量参数.md
 │   │   └── 力效表.png
 │   └── ArduPilot_Copter45_SITL_Gazebo环境记录.md
-├── 代码/                              # 飞行代码（ROS 工作空间）
-│   ├── cuadc_src/                     #   主 ROS 包（视觉+控制+坐标变换）
-│   │   ├── scripts/                   #      核心节点：camera/detector/geopose
-│   │   ├── launch/                    #      启动文件
-│   │   ├── config/                    #      参数文件
-│   │   ├── msg/                       #      自定义消息
-│   │   └── models/                    #      仿真模型
-│   ├── src-QClaw/                     #   D435i 检测器 ROS 包（备份参考）
-│   └── 视觉/                          #   视觉组交付物（多版本迭代记录）
+│
+├── 代码/                                    # 飞行代码（NUC ROS 工作空间来源）
+│   ├── README.md                            #   代码目录详细说明
+│   ├── cuadc_src/                           #   🔒 主功能包（伍尚京维护）
+│   │   ├── scripts/                         #     main / servo_test / camera / detector / geopose
+│   │   ├── launch/                          #     run_main / cuadc_run / run_servo_test
+│   │   ├── config/                          #     params.yaml
+│   │   ├── msg/                             #     自定义 ROS 消息
+│   │   └── models/                          #     仿真模型
+│   ├── 视觉组独立完成的部分（对应src4.4）/     #   ★ 视觉组最新交付：YOLO + 大地坐标变换
+│   │   ├── CODE_EXPLANATION.md              #     架构说明与节点详解
+│   │   ├── RUN_COMMANDS.md                  #     常用命令快速参考
+│   │   └── d435i_yellow_circle_detector/    #     ROS 功能包
+│   ├── d435i_yellow_circle_detector（对应src4.3.1）/  # 旧版视觉包（待删除）
+│   ├── 视觉组旧版本代码管理/                  #   视觉组完整迭代存档（src-1.0 ~ src4.4）
+│   ├── src-QClaw/                           #   D435i 检测器 ROS2 包（参考）
+│   └── 识别圆筒的yolov8权重文件/              #   YOLO 模型 best.pt
+│
 └── .gitignore
 ```
 
