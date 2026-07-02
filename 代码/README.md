@@ -31,6 +31,7 @@
 │   └── README.md
 │
 ├── 视觉原始版本存档/                        # 视觉组交付物（多版本迭代记录，参考用）
+├── NUC修复/                               # NUC 上 Claude Code 修复的代码（按日期+NUC编号）
 │   ├── src-1.0/ 到 src-4.4/              #   YOLO + 黄色圆检测各版本
 │   └── src最新版本/                        #   当前最可用版本
 │
@@ -122,6 +123,54 @@ catkin_make
 ```
 
 把 `src/你的测试包` 复制到 NUC 的 `~/catkin_ws/src/` 下面即可独立运行，不会影响 cuadc_src。
+
+---
+
+## NUC 上修代码 → 推回仓库
+
+场景：笔记本上写的脚本部署到 NUC 跑不通，用 NUC 上的 Claude Code 修好了。修好的版本需要推回 GitHub。
+
+### 前提（一次性）
+
+在 NUC 上配好 Git 身份和登录：
+
+```bash
+git config --global user.name "Claude Code - NUC1"
+git config --global user.email "nuc1@cuadc.local"
+```
+
+NUC 需要 GitHub 登录权限。两种方式任选一种：
+- **HTTPS + Token**：在 GitHub 生成 Personal Access Token → `git clone` 时用 token 当密码
+- **SSH Key**：`ssh-keygen` 生成密钥 → 公钥上传到 GitHub Settings → SSH Keys
+
+### 操作流程
+
+让 Claude Code 执行以下步骤：
+
+```
+1. 把修好的代码放到 代码/NUC修复/ 文件夹
+2. git add 代码/NUC修复/
+3. git commit -m "NUC1 修复：xxx 脚本在实机上跑通"
+4. git push
+```
+
+### 文件夹命名规则
+
+Claude Code 提交的内容放在 `代码/NUC修复/` 下，按日期和 NUC 编号区分：
+
+```
+代码/NUC修复/
+├── 2026-07-02_NUC1_舵机控制修正/
+│   ├── servo_fix.py
+│   └── servo_fix.md
+└── 2026-07-03_NUC2_视觉参数调优/
+    ├── detector_params.yaml
+    └── detector_params.md
+```
+
+### 说明
+
+Claude Code 在 NUC 上相当于一个**虚拟队员**。它的修改也走同样的 `add → commit → push` 流程，和其他队员没有区别。唯一要注意的是用 `NUC修复/` 文件夹而不是直接改 `cuadc_src/`——NUC 上的修复由伍尚京确认后手动合并进主分支。
 
 ---
 

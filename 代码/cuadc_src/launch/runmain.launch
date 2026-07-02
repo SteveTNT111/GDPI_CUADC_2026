@@ -1,0 +1,61 @@
+<launch>
+  <!--
+    runmain.launch — CUADC 2026 总启动文件
+    启动内容：
+      1. main.py        飞行主控（状态机 + 模式切换 + 起飞）
+      2. camera_node     D435i 相机驱动
+      3. detector_node   YOLO 目标检测
+      4. geopose_node    大地坐标变换（可选）
+
+    运行方式：
+      roslaunch cuadc_vision runmain.launch
+      roslaunch cuadc_vision runmain.launch auto_arm:=true auto_takeoff:=true
+  -->
+
+  <!-- ==================== 全局参数 ==================== -->
+  <arg name="fps" default="30" />
+  <arg name="enable_geopose" default="false" />
+  <arg name="yolo_model_path" default="/home/lab/model/best.pt" />
+  <arg name="yolo_device" default="cpu" />
+
+  <!-- 主控参数 -->
+  <arg name="takeoff_altitude" default="10.0" />
+  <arg name="auto_arm" default="false" />
+  <arg name="auto_takeoff" default="false" />
+
+  <!-- ==================== 1. 飞行主控 ==================== -->
+  <node pkg="cuadc_vision"
+        type="main.py"
+        name="flight_controller"
+        output="screen"
+        required="true">
+    <param name="takeoff_altitude" value="$(arg takeoff_altitude)" />
+    <param name="auto_arm" value="$(arg auto_arm)" />
+    <param name="auto_takeoff" value="$(arg auto_takeoff)" />
+  </node>
+
+  <!-- ==================== 2. D435i 相机 ==================== -->
+  <node pkg="cuadc_vision"
+        type="camera_node.py"
+        name="camera_node"
+        output="screen">
+    <param name="fps" value="$(arg fps)" />
+  </node>
+
+  <!-- ==================== 3. YOLO 检测 ==================== -->
+  <node pkg="cuadc_vision"
+        type="detector_node.py"
+        name="detector_node"
+        output="screen">
+    <param name="model_path" value="$(arg yolo_model_path)" />
+    <param name="device" value="$(arg yolo_device)" />
+  </node>
+
+  <!-- ==================== 4. 大地坐标变换 ==================== -->
+  <group if="$(arg enable_geopose)">
+    <node pkg="cuadc_vision"
+          type="geopose_node.py"
+          name="geopose_node"
+          output="screen" />
+  </group>
+</launch>
