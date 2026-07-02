@@ -16,11 +16,13 @@
 │   │   ├── servo_test.py                        #     舵机测试：MAVROS 控制 5/6 通道抛投器
 │   │   ├── camera_node.py                       #     D435i 相机驱动
 │   │   ├── detector_node.py                     #     目标检测（YOLO + 传统CV）
-│   │   └── geopose_node.py                     #     坐标变换（相机→机体→ENU→大地）
+│   │   ├── geopose_node.py                     #     坐标变换（相机→机体→ENU→大地）
+│   │   └── flight_data_video_recorder_node.py   #     飞行数据录像：解锁自动录制 + OSD叠加
 │   ├── launch/                                  #   启动文件
 │   │   ├── run_main.launch                      #     总启动：主控 + 相机 + YOLO + 坐标变换
 │   │   ├── cuadc_run.launch                     #     视觉管线启动（相机 + 检测 + geopose）
-│   │   └── run_servo_test.launch               #     舵机测试终端（手动 on/off）
+│   │   ├── run_servo_test.launch               #     舵机测试终端（手动 on/off）
+│   │   └── run_flight_recorder.launch           #     飞行数据录像（解锁自动录，叠加高度/GPS/电压）
 │   ├── config/                                  #   参数文件
 │   │   └── params.yaml
 │   ├── msg/                                     #   自定义 ROS 消息
@@ -76,6 +78,7 @@
 | `camera_node.py` | D435i 驱动，发布 RGB + 深度图 | 由 run_main.launch 或 cuadc_run.launch 自动启动 |
 | `detector_node.py` | YOLO + 传统CV 检测，发布目标位置 | 由 run_main.launch 或 cuadc_run.launch 自动启动 |
 | `geopose_node.py` | 相机系 → 机体 → ENU → 大地坐标变换 | 由 run_main.launch 自动启动（可选） |
+| `flight_data_video_recorder_node.py` | 飞行数据录像：解锁自动录制，画面叠加高度/GPS/电压 | `roslaunch cuadc_vision run_flight_recorder.launch` |
 
 ### 启动文件说明
 
@@ -84,6 +87,7 @@
 | `run_main.launch` | main + camera + detector + geopose | **总启动**：完整比赛流程一键启动 |
 | `cuadc_run.launch` | camera + detector + geopose | 仅视觉管线（不含主控） |
 | `run_servo_test.launch` | servo_test | 舵机独立测试终端 |
+| `run_flight_recorder.launch` | camera + flight_data_video_recorder | 飞行数据录像（解锁自动录，用于航线规划） |
 
 ### 舵机说明
 

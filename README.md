@@ -51,8 +51,8 @@ GDPI_CUADC_2026/
 ├── 代码/                                    # 飞行代码（NUC ROS 工作空间来源）
 │   ├── README.md                            #   代码目录详细说明
 │   ├── cuadc_src/                           #   🔒 主功能包（伍尚京维护）
-│   │   ├── scripts/                         #     main / servo_test / camera / detector / geopose
-│   │   ├── launch/                          #     run_main / cuadc_run / run_servo_test
+│   │   ├── scripts/                         #     main / servo_test / camera / detector / geopose / flight_recorder
+│   │   ├── launch/                          #     run_main / cuadc_run / run_servo_test / run_flight_recorder
 │   │   ├── config/                          #     params.yaml
 │   │   ├── msg/                             #     自定义 ROS 消息
 │   │   └── models/                          #     仿真模型
