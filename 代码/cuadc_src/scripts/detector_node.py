@@ -33,6 +33,8 @@ class DetectorNode:
         self.device = rospy.get_param("~device", "cpu")
         self.invert_camera_x = get_bool_param("~invert_camera_x", True)
         self.depth_patch_radius = int(rospy.get_param("~depth_patch_radius", 2))
+        self.show_window = get_bool_param("~show_window", False)
+        self.window_name = rospy.get_param("~window_name", "YOLO Detection")
 
         color_topic = rospy.get_param("~color_topic", "/vision/color/image_raw")
         depth_topic = rospy.get_param("~depth_topic", "/vision/aligned_depth/image_raw")
@@ -107,6 +109,13 @@ class DetectorNode:
         annotated_msg = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
         annotated_msg.header = msg.header
         self.annotated_pub.publish(annotated_msg)
+
+        if self.show_window:
+            try:
+                cv2.imshow(self.window_name, annotated)
+                cv2.waitKey(1)
+            except Exception:
+                pass
 
     def lookup_depth(self, x, y):
         with self.depth_lock:

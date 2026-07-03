@@ -21,9 +21,11 @@ cuadc_src/
 │   ├── geopose_node.py                        #   坐标变换（相机→机体→ENU→WGS84）
 │   ├── flight_data_video_recorder_node.py     #   飞行数据录像（解锁自动录）
 │   └── auto_drop_node.py                      #   自动抛投触发
-├── launch/                                    # 启动文件（5个）
+├── launch/                                    # 启动文件（6个，每个 .py 一个同名 launch）
+│   ├── camera_node.launch                     #   D435i 相机（配合 rviz 查看画面）
+│   ├── detector_node.launch                   #   YOLO 检测（相机 + 检测 + OpenCV 窗口）
+│   ├── geopose_node.launch                    #   大地坐标变换（待创建）
 │   ├── run_main.launch                        #   总启动：主控 + 相机 + 检测 + geopose
-│   ├── cuadc_run.launch                       #   视觉管线：相机 + 检测 + geopose
 │   ├── run_servo_test.launch                  #   舵机测试终端
 │   ├── run_flight_recorder.launch             #   飞行数据录像
 │   └── auto_drop.launch                       #   自动抛投
@@ -171,91 +173,88 @@ rostopic pub /servo/cmd std_msgs/String "data: 'off'"
 
 ### 3. camera_node.py — D435i 相机驱动
 
-**启动文件：** `cuadc_run.launch`（默认就会启动，不需要额外参数）
+**启动文件：** `camera_node.launch`
 
-**功能：** 打开 Intel RealSense D435i 深度相机，发布彩色图像、对齐后的深度图像、相机内参。所有视觉相关节点（检测、录像）都依赖它。
+**功能：** 打开 Intel RealSense D435i 深度相机，发布彩色图像、对齐后的深度图像、相机内参。
 
-**测试什么：** 验证 D435i 在 NUC 上能否正常出图、USB 带宽是否够、帧率是否稳定。
+**测试什么：** 验证 D435i 在 NUC 上能否正常出图。配合 `rqt_image_view` 或 `rviz` 查看画面。
 
 **启动后你可以：**
-- 用 `rostopic echo` 或 `rqt_image_view` 查看画面
-- 检查终端日志确认 USB 类型（usb=3.2 正常，usb=2.1 有问题）
+- 在 rviz 里 Add → By topic → `/vision/color/image_raw` 看彩色画面
+- 终端日志确认 USB 类型（usb=3.2 正常，usb=2.1 有问题）
 
 **启动命令：**
 
 ```bash
-# ① 默认 30FPS
-roslaunch cuadc_vision cuadc_run.launch
+# 打开相机，用 rviz 看画面
+roslaunch cuadc_vision camera_node.launch
+# 另开终端：rviz
+rviz
 
-# ② USB 不稳定时降帧率
-roslaunch cuadc_vision cuadc_run.launch fps:=15
+# 或用 rqt 快速看
+rosrun rqt_image_view rqt_image_view /vision/color/image_raw
+```
+
+```bash
+# USB 不稳定时降帧率
+roslaunch cuadc_vision camera_node.launch fps:=15
 ```
 
 **发布话题：**
 
 | 话题 | 类型 | 用途 |
 |------|------|------|
-| `/d435i/color/image_raw` | sensor_msgs/Image | 彩色图（640×480 bgr8） |
-| `/d435i/aligned_depth/image_raw` | sensor_msgs/Image | 深度图（已对齐到彩色） |
-| `/d435i/color/camera_info` | sensor_msgs/CameraInfo | 相机内参矩阵 |
+| `/vision/color/image_raw` | sensor_msgs/Image | 彩色图（640×480 bgr8） |
+| `/vision/aligned_depth/image_raw` | sensor_msgs/Image | 深度图（已对齐到彩色） |
+| `/vision/color/camera_info` | sensor_msgs/CameraInfo | 相机内参矩阵 |
 
 **验证是否正常：**
 
 ```bash
-# 看彩色图
-rosrun rqt_image_view rqt_image_view /d435i/color/image_raw
-# 终端日志应打印：D435i started. 640x480 bgr8@30 depth_scale=0.00100000
+rostopic hz /vision/color/image_raw   # 应该有稳定 30Hz 输出
+# 终端日志应打印：D435i started. 640x480 bgr8@30
 # 如果打印 usb=2.1 则说明 USB 工作在 2.0 模式，需换 USB3 口或线
 ```
 
 ---
 
+---
+
 ### 4. detector_node.py — YOLO 目标检测
 
-**启动文件：** `cuadc_run.launch`（加 `enable_yolo:=true`）
+**启动文件：** `detector_node.launch`
 
-**功能：** 加载 YOLOv8 模型，对相机画面逐帧推理，检测圆筒、危险标识等比赛目标。发布每个目标的类别、置信度、像素位置、相机系 3D 坐标。
+**功能：** 一键启动 D435i 相机 + YOLO 检测，弹出 OpenCV 窗口显示实时标注画面。加载 YOLOv8 模型逐帧推理，发布检测结果。
 
-**测试什么：** 验证模型能否正确识别圆筒、置信度是否够高、检测帧率是否满足实时要求、相机系坐标是否合理。
+**测试什么：** 验证模型能否正确识别圆筒、置信度是否够高、检测帧率是否满足实时要求。
 
 **启动后你可以：**
-- 用 `rostopic echo /yolo/detection` 查看检测结果
-- 用 `rqt_image_view` 看 `/yolo/annotated_image` 标注画面
+- 自动弹出 `YOLO Detection` 窗口，实时看到检测框和距离标注
+- 用 `rostopic echo /yolo/detection` 查看检测数据
 - 拿着圆筒在相机前移动，观察检测框是否跟随
 
 **启动命令：**
 
 ```bash
-# ① 首次测试——CPU 推理，模型在 models/ 下则自动加载
-roslaunch cuadc_vision cuadc_run.launch enable_yolo:=true
-```
+# ① 首次测试——CPU 推理
+roslaunch cuadc_vision detector_node.launch
 
-```bash
-# ② 比赛用——GPU 推理 + 提高阈值减少误检
-roslaunch cuadc_vision cuadc_run.launch enable_yolo:=true yolo_device:=cuda:0 yolo_conf_threshold:=0.7
-```
+# ② GPU 推理 + 提高阈值
+roslaunch cuadc_vision detector_node.launch yolo_device:=cuda:0 yolo_conf_threshold:=0.7
 
-```bash
-# ③ 用自己的模型
-roslaunch cuadc_vision cuadc_run.launch enable_yolo:=true yolo_model_path:=/home/lab/my_model.pt
+# ③ 自定义模型
+roslaunch cuadc_vision detector_node.launch yolo_model_path:=/home/lab/my_model.pt
 ```
 
 **发布话题：**
 
 | 话题 | 类型 | 说明 |
 |------|------|------|
-| `/yolo/detection` | YoloDetection | 当前帧置信度最高的那个目标 |
-| `/yolo/detections` | YoloDetections | 当前帧检测到的全部目标 |
-| `/yolo/annotated_image` | sensor_msgs/Image | 画了检测框和距离的标注图 |
+| `/vision/yolo/detection` | YoloDetection | 当前帧最佳目标 |
+| `/vision/yolo/detections` | YoloDetections | 当前帧全部目标 |
+| `/vision/annotated_image` | sensor_msgs/Image | 标注画面 |
 
-**验证是否正常：**
-
-```bash
-# 终端应打印：YOLO model loaded from .../models/best.pt
-# 然后持续打印检测到的目标信息
-rostopic echo /yolo/detection
-# 应看到 class_name / confidence / camera_x_m / camera_y_m / camera_z_m 等字段
-```
+**验证是否正常：** 窗口弹出且画面流畅，终端打印 `Detector started. model=...`，拿着圆筒在镜头前目标框跟随移动。
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
@@ -388,8 +387,9 @@ roslaunch cuadc_vision auto_drop.launch pixel_threshold:=30.0 min_conf:=0.7
 
 | 文件 | 包含节点 | 用途 |
 |------|---------|------|
+| `camera_node.launch` | camera | 相机驱动（配合 rviz） |
+| `detector_node.launch` | camera + detector | 相机 + YOLO + OpenCV 窗口 |
 | `run_main.launch` | main + camera + detector + geopose | 总启动 |
-| `cuadc_run.launch` | camera + detector + geopose | 仅视觉 |
 | `run_servo_test.launch` | servo_test | 舵机测试 |
 | `run_flight_recorder.launch` | camera + flight_data_video_recorder | 飞行录像 |
 | `auto_drop.launch` | detector + auto_drop | 自动抛投 |
