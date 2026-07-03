@@ -10,9 +10,10 @@
       - CH5 默认启用（抛投器 1）
       - CH6 默认禁用（抛投器 2，如需独立控制两个抛投器请设为 true）
 
-    PWM 配置：
-      - 关闭 (close): 1100 μs
-      - 打开 (open):   1400 μs
+    PWM 配置（单舵机双抛投器）：
+      - 全关 (off): 1000 μs → 两个抛投器都关闭
+      - 全开 (on):  2000 μs → 两个抛投器都打开
+      - 半开:       1500 μs → 仅第一个打开
 
     运行方式：
       roslaunch cuadc_vision run_servo_test.launch
@@ -33,8 +34,8 @@
   <!-- ==================== 舵机参数 ==================== -->
   <arg name="enable_ch5" default="true" />
   <arg name="enable_ch6" default="false" />
-  <arg name="pwm_open" default="1400" />
-  <arg name="pwm_close" default="1100" />
+  <arg name="pwm_open" default="2000" />
+  <arg name="pwm_close" default="1000" />
 
   <!-- ==================== 自动启动 MAVROS ==================== -->
   <include if="$(arg auto_start_mavros)"

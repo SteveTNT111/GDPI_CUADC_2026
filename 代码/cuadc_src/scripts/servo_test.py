@@ -8,14 +8,14 @@ servo_test.py — CUADC 2026 抛投器舵机测试节点
   1. 通过 MAVROS MAV_CMD_DO_SET_SERVO 直接控制飞控舵机输出（不依赖 SERVOx_FUNCTION）
   2. 终端交互模式：手动输入 on/off 控制舵机开关
   3. ROS 话题控制：订阅 /servo/cmd 话题接收控制指令
-  4. PWM: 1100 = 关闭, 1400 = 打开
-  5. 实时显示飞控连接状态和心跳
+  4. 实时显示飞控连接状态和心跳
 
-通道说明：
-  - 5 通道 (SERVO5)：抛投器 1 舵机  [默认启用]
-  - 6 通道 (SERVO6)：抛投器 2 舵机  [默认禁用]
-  - 可使用一个舵机通过机械联动同时驱动两侧抛投器，
-    也可使用两个舵机独立控制（启用 CH6 即可）
+舵机配置（单舵机控制双抛投器，接 SERVO5）：
+  - PWM 1000：两个抛投器都关闭
+  - PWM 1500：第一个打开，第二个关闭
+  - PWM 2000：两个都打开
+  - on  → PWM 2000（全部打开）
+  - off → PWM 1000（全部关闭）
 
 飞控参数要求（ArduPilot）：
   - RC_OVERRIDE_TIME > 0（允许外部 MAVLink 指令，默认 3s 即可）
@@ -59,9 +59,10 @@ class ServoController:
         self.enable_ch5 = rospy.get_param("~enable_ch5", True)
         self.enable_ch6 = rospy.get_param("~enable_ch6", False)
 
-        # PWM 值（μs）
-        self.pwm_open = rospy.get_param("~pwm_open", 1400)
-        self.pwm_close = rospy.get_param("~pwm_close", 1100)
+        # PWM 值（μs）—— 单舵机控制双抛投器
+        # 1000=全关, 1500=第一个开, 2000=全开
+        self.pwm_open = rospy.get_param("~pwm_open", 2000)
+        self.pwm_close = rospy.get_param("~pwm_close", 1000)
 
         # 初始状态
         self.servo_open = False

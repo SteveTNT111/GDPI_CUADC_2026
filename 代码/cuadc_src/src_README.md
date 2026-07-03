@@ -134,7 +134,9 @@ roslaunch cuadc_vision run_main.launch auto_arm:=true auto_takeoff:=true takeoff
 
 **启动文件：** `run_servo_test.launch`
 
-**功能：** 通过 MAVROS RC Override 直接控制飞控的第 5、6 输出通道，驱动抛投器舵机开关。PWM 1100 = 关闭，1400 = 打开。
+**功能：** 通过 MAVLink `MAV_CMD_DO_SET_SERVO` 指令直接控制飞控舵机输出引脚，不经过飞控逻辑（无需设置 SERVOx_FUNCTION）。PWM 1100 = 关闭，1400 = 打开。
+
+**飞控参数要求：** `SERVO5_FUNCTION` / `SERVO6_FUNCTION` 保持 **0 (Disabled)**，飞控不碰这个引脚。`RC_OVERRIDE_TIME` 必须 > 0（默认 3 即可），设成 0 会拒绝所有外部指令。
 
 **测试什么：** 验证舵机接线是否正确、PWM 值是否能驱动抛投器、机械结构是否顺畅。**不需要飞机起飞，地上就能测。**
 
