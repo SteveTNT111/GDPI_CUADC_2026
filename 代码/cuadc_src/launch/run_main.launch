@@ -15,7 +15,7 @@
   <!-- ==================== 全局参数 ==================== -->
   <arg name="fps" default="30" />
   <arg name="enable_geopose" default="false" />
-  <arg name="yolo_model_path" default="/home/lab/model/best.pt" />
+  <arg name="yolo_model_path" default="$(find cuadc_vision)/models/best.pt" />
   <arg name="yolo_device" default="cpu" />
 
   <!-- 主控参数 -->

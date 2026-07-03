@@ -16,7 +16,7 @@
   <arg name="calibration_distance_m" default="0.20" />
   <arg name="calibration_radius_px" default="0.0" />
   <arg name="enable_yolo" default="false" />
-  <arg name="yolo_model_path" default="/home/lab/model/best.pt" />
+  <arg name="yolo_model_path" default="$(find d435i_yellow_circle_detector)/models/best.pt" />
   <arg name="yolo_conf_threshold" default="0.5" />
   <arg name="yolo_imgsz" default="640" />
   <arg name="yolo_device" default="cpu" />

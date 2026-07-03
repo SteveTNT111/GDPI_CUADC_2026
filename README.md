@@ -48,14 +48,19 @@ GDPI_CUADC_2026/
 │   │   └── 力效表.png
 │   └── ArduPilot_Copter45_SITL_Gazebo环境记录.md
 │
-├── 代码/                                    # 飞行代码（NUC ROS 工作空间来源）
+├── 机械结构/                                # ZD550 机架 + D435i 相机三维模型
+│   ├── README.md                            #   机架说明与文件格式
+│   ├── ZD550四旋翼无人机碳纤维机架模型图纸 stp格式/
+│   └── d435i-intel-realsense-1.snapshot.1/  #   D435i 相机 SolidWorks 模型
+│
+├── 代码/                                    # 全部飞行代码
 │   ├── README.md                            #   代码目录详细说明
 │   ├── cuadc_src/                           #   🔒 主功能包（伍尚京维护）
 │   │   ├── scripts/                         #     main / servo_test / camera / detector / geopose / flight_recorder
-│   │   ├── launch/                          #     run_main / cuadc_run / run_servo_test / run_flight_recorder
+│   │   ├── launch/                          #     run_main / cuadc_run / run_servo_test / run_flight_recorder / auto_drop
 │   │   ├── config/                          #     params.yaml
 │   │   ├── msg/                             #     自定义 ROS 消息
-│   │   └── models/                          #     仿真模型
+│   │   └── models/                          #     YOLO 模型存放（best.pt 不入库，需手动放入）
 │   ├── 视觉组独立完成的部分（对应src4.4）/     #   ★ 视觉组最新交付：YOLO + 大地坐标变换
 │   │   ├── CODE_EXPLANATION.md              #     架构说明与节点详解
 │   │   ├── RUN_COMMANDS.md                  #     常用命令快速参考
@@ -63,7 +68,6 @@ GDPI_CUADC_2026/
 │   ├── d435i_yellow_circle_detector（对应src4.3.1）/  # 旧版视觉包（待删除）
 │   ├── 视觉组旧版本代码管理/                  #   视觉组完整迭代存档（src-1.0 ~ src4.4）
 │   ├── src-QClaw/                           #   D435i 检测器 ROS2 包（参考）
-│   └── 识别圆筒的yolov8权重文件/              #   YOLO 模型 best.pt
 │
 └── .gitignore
 ```

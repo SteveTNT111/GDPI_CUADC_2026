@@ -8,6 +8,7 @@ import cv2
 import math
 import numpy as np
 import rospy
+import rospkg
 from cv_bridge import CvBridge
 from sensor_msgs.msg import CameraInfo, Image
 
@@ -25,7 +26,8 @@ def get_bool_param(name, default):
 
 class YoloDetectorNode:
     def __init__(self):
-        self.model_path = os.path.expanduser(rospy.get_param("~model_path", "/home/lab/model/best.pt"))
+        _default_model = os.path.join(rospkg.RosPack().get_path('d435i_yellow_circle_detector'), 'models', 'best.pt')
+        self.model_path = os.path.expanduser(rospy.get_param("~model_path", _default_model))
         self.conf_threshold = float(rospy.get_param("~conf_threshold", 0.5))
         self.imgsz = int(rospy.get_param("~imgsz", 640))
         self.device = rospy.get_param("~device", "cpu")

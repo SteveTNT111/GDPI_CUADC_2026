@@ -1,6 +1,8 @@
 # 代码文件夹
 
-> CUADC 2026 全部飞行代码。**本文件夹推送到 GitHub，也是 NUC 机载电脑上 ROS 工作空间的来源。**
+> CUADC 2026 全部飞行代码。**本文件夹推送到 GitHub。**
+> NUC 机载电脑只需拉取其中的 `cuadc_src/` 子目录到 `~/catkin_ws/src/` 即可编译运行，
+> 详见下方"如何获取代码"。各节点的运行命令见 [cuadc_src/src_README.md](cuadc_src/src_README.md)。
 
 ---
 
@@ -17,22 +19,24 @@
 │   │   ├── camera_node.py                       #     D435i 相机驱动
 │   │   ├── detector_node.py                     #     目标检测（YOLO + 传统CV）
 │   │   ├── geopose_node.py                     #     坐标变换（相机→机体→ENU→大地）
-│   │   └── flight_data_video_recorder_node.py   #     飞行数据录像：解锁自动录制 + OSD叠加
+│   │   ├── flight_data_video_recorder_node.py   #     飞行数据录像：解锁自动录制 + OSD叠加
+│   │   └── auto_drop_node.py                    #     自动抛投：检测对准后自动触发舵机释放
 │   ├── launch/                                  #   启动文件
 │   │   ├── run_main.launch                      #     总启动：主控 + 相机 + YOLO + 坐标变换
 │   │   ├── cuadc_run.launch                     #     视觉管线启动（相机 + 检测 + geopose）
 │   │   ├── run_servo_test.launch               #     舵机测试终端（手动 on/off）
-│   │   └── run_flight_recorder.launch           #     飞行数据录像（解锁自动录，叠加高度/GPS/电压）
+│   │   ├── run_flight_recorder.launch           #     飞行数据录像（解锁自动录，叠加高度/GPS/电压）
+│   │   └── auto_drop.launch                     #     自动抛投触发
 │   ├── config/                                  #   参数文件
 │   │   └── params.yaml
 │   ├── msg/                                     #   自定义 ROS 消息
 │   │   ├── GeoTarget.msg
 │   │   ├── YoloDetection.msg
 │   │   └── YoloDetections.msg
-│   ├── models/                                  #   仿真模型
+│   ├── models/                                  #   YOLO 模型存放（best.pt 不入库，需手动放入）
 │   ├── CMakeLists.txt
 │   ├── package.xml
-│   └── README.md
+│   └── src_README.md                             #   节点与启动命令参考
 │
 ├── 视觉组独立完成的部分（对应src4.4）/           # ★ 视觉组最新交付：YOLO + 大地坐标变换
 │   ├── CODE_EXPLANATION.md                      #   完整架构说明与节点详解
@@ -52,9 +56,6 @@
 ├── src-QClaw/                                   # D435i 检测器 ROS2 包（参考）
 │   ├── d435i_detector/                          #   ROS2 版本（setup.py）
 │   └── src-1.1(最可用，30FPS）/                  #   ROS1 版本副本（与旧版存档重复）
-│
-├── 识别圆筒的yolov8权重文件/                     # YOLO 模型
-│   └── best.pt
 │
 └── （队员代码文件夹）                            # 见下方规则
     ├── 你的名字/                                 #   用你的名字或功能命名
@@ -79,6 +80,7 @@
 | `detector_node.py` | YOLO + 传统CV 检测，发布目标位置 | 由 run_main.launch 或 cuadc_run.launch 自动启动 |
 | `geopose_node.py` | 相机系 → 机体 → ENU → 大地坐标变换 | 由 run_main.launch 自动启动（可选） |
 | `flight_data_video_recorder_node.py` | 飞行数据录像：解锁自动录制，画面叠加高度/GPS/电压 | `roslaunch cuadc_vision run_flight_recorder.launch` |
+| `auto_drop_node.py` | 自动抛投：检测目标对准光心后自动触发舵机释放 | `roslaunch cuadc_vision auto_drop.launch` |
 
 ### 启动文件说明
 
@@ -88,6 +90,7 @@
 | `cuadc_run.launch` | camera + detector + geopose | 仅视觉管线（不含主控） |
 | `run_servo_test.launch` | servo_test | 舵机独立测试终端 |
 | `run_flight_recorder.launch` | camera + flight_data_video_recorder | 飞行数据录像（解锁自动录，用于航线规划） |
+| `auto_drop.launch` | detector + auto_drop | 自动抛投触发（检测对准→释放舵机） |
 
 ### 舵机说明
 
@@ -95,94 +98,169 @@
 - 6 通道：抛投器 2（PWM 1100=关闭, 1400=打开）
 - 一个舵机可以驱动两侧抛投器（机械联动），也可以用两个舵机独立控制
 
-### 部署到 NUC
+## 如何获取代码
+
+> 仓库地址：`https://github.com/SteveTNT111/GDPI_CUADC_2026`
+> 不管你是在 NUC、个人笔记本、还是实验室台式机上操作，都适用。
+
+### 场景一：只想要 cuadc_src（NUC 部署推荐）
+
+用 VS Code 终端（`Ctrl+`` `）逐步执行：
+
+**第 1 步：创建空仓库并设置稀疏检出**
 
 ```bash
-# 在 NUC 上
-cd ~/catkin_ws/src
-ln -s /path/to/GDPI_CUADC_2026/代码/cuadc_src .
-cd ~/catkin_ws
-catkin_make
+mkdir -p ~/cuadc_sparse && cd ~/cuadc_sparse
+git init
+git remote add origin https://github.com/SteveTNT111/GDPI_CUADC_2026.git
 ```
 
-测试完成后，将 NUC 硬盘镜像克隆到另外两台 NUC。
+**第 2 步：配置只拉取 代码/cuadc_src**
+
+```bash
+git config core.sparseCheckout true
+echo "代码/cuadc_src/" >> .git/info/sparse-checkout
+```
+
+**第 3 步：拉取（只下载几 MB）**
+
+```bash
+git pull origin main
+```
+
+**第 4 步：复制到 ROS 工作空间**
+
+```bash
+rm -rf ~/catkin_ws/src/cuadc_src
+cp -r 代码/cuadc_src ~/catkin_ws/src/cuadc_src
+```
+
+**第 5 步：清理临时目录，编译**
+
+```bash
+cd ~ && rm -rf ~/cuadc_sparse
+cd ~/catkin_ws && catkin_make && source devel/setup.bash
+```
+
+### 场景二：克隆整个仓库
+
+适用于：个人电脑上开发、或者 NUC 网速快空间大图省事。
+
+VS Code 图形界面：`Ctrl+Shift+P` → `Git: Clone` → 输入仓库 URL → 选目录。
+
+或终端：
+
+```bash
+cd ~
+git clone https://github.com/SteveTNT111/GDPI_CUADC_2026.git
+
+# NUC 上额外执行：复制到工作空间
+rm -rf ~/catkin_ws/src/cuadc_src
+cp -r ~/GDPI_CUADC_2026/代码/cuadc_src ~/catkin_ws/src/cuadc_src
+```
+
+### 场景三：已有克隆，更新代码
+
+```bash
+cd ~/GDPI_CUADC_2026
+git pull origin main
+
+# NUC 上额外：重新覆盖工作空间
+cp -r 代码/cuadc_src ~/catkin_ws/src/cuadc_src
+cd ~/catkin_ws && catkin_make
+```
+
+### 方案对比
+
+| | 场景一（稀疏检出） | 场景二/三（全量克隆） |
+|---|---|---|
+| 下载量 | ~5 MB | ~200+ MB |
+| 操作步骤 | 5 条命令 | 2 条命令 |
+| 适用 | 网速慢、NUC 空间紧张 | 开发调试、图省事 |
 
 ---
 
-## 队员代码管理规则
+## 如何在 NUC 上推送代码
 
-### 每个人必须遵守
+> 在 NUC 上改完代码想直接推回 GitHub？可以的。让 NUC 的 VS Code 登录你的 GitHub 账号即可。
 
-1. **cuadc_src 不要碰** —— 那是伍尚京管的，有问题在群里说
-2. **在自己的文件夹里干活** —— 用你的名字或功能名建文件夹
-3. **每个代码文件配一个同名 .md 说明** —— 至少写清楚：
-   - 这个脚本干什么
-   - 依赖什么（pip list）
-   - 怎么跑（命令行）
-4. **在自己电脑上测通了再上传** —— 不要传半成品
+### 一次性配置：让 NUC 登录 GitHub
 
-### 提交步骤（VS Code 图形界面）
+#### 方式 A：HTTPS + Token（推荐，最简单）
 
-```
-① 把代码和说明文件放进 代码/你的名字/
-② Ctrl+Shift+G 打开源代码管理
-③ 只点你自己文件的 + 号（不要点别人的）
-④ 写一行提交信息："陈智勇：桶检测脚本 v2"
-⑤ 点 ✓ 提交
-⑥ 点 ... → 推送
-```
-
-### 如果你想在 NUC 上独立测试一个功能
-
-不要动 cuadc_src。在你的文件夹下建一个 `src/` 子文件夹：
-
-```
-代码/你的名字/
-├── 功能名.py              # 你的代码
-├── 功能名.md              # 说明文档
-└── src/                   # ROS 包（可选）
-    └── 你的测试包/
-        ├── scripts/
-        ├── launch/
-        ├── CMakeLists.txt
-        └── package.xml
-```
-
-把 `src/你的测试包` 复制到 NUC 的 `~/catkin_ws/src/` 下面即可独立运行，不会影响 cuadc_src。
-
----
-
-## NUC 上修代码 → 推回仓库
-
-场景：笔记本上写的脚本部署到 NUC 跑不通，用 NUC 上的 Claude Code 修好了。修好的版本需要推回 GitHub。
-
-### 前提（一次性）
-
-在 NUC 上配好 Git 身份和登录：
+**第 1 步：在 NUC 上配置 Git 身份**
 
 ```bash
-git config --global user.name "Claude Code - NUC1"
-git config --global user.email "nuc1@cuadc.local"
+git config --global user.name "你的GitHub用户名"
+git config --global user.email "你的GitHub注册邮箱"
 ```
 
-NUC 需要 GitHub 登录权限。两种方式任选一种：
-- **HTTPS + Token**：在 GitHub 生成 Personal Access Token → `git clone` 时用 token 当密码
-- **SSH Key**：`ssh-keygen` 生成密钥 → 公钥上传到 GitHub Settings → SSH Keys
+**第 2 步：在任意一台能上网的电脑上生成 GitHub Token**
 
-### 操作流程
+1. 浏览器打开 https://github.com/settings/tokens
+2. 点 `Generate new token` → `Generate new token (classic)`
+3. Note 填 `NUC1`，过期时间选长一点
+4. 勾选 `repo`（全部仓库读写权限）
+5. 点生成，**复制 token（只显示一次！）**
 
-让 Claude Code 执行以下步骤：
+**第 3 步：在 NUC 上用 Token 克隆**
 
+```bash
+cd ~
+git clone https://github.com/SteveTNT111/GDPI_CUADC_2026.git
+# 用户名输入你的 GitHub 用户名
+# 密码粘贴刚才复制的 token（终端里不会显示，正常）
 ```
-1. 把修好的代码放到 代码/NUC修复/ 文件夹
-2. git add 代码/NUC修复/
-3. git commit -m "NUC1 修复：xxx 脚本在实机上跑通"
-4. git push
+
+**第 4 步：让 Git 记住 token（不用每次输入）**
+
+```bash
+git config --global credential.helper store
 ```
 
-### 文件夹命名规则
+之后在 NUC 的 VS Code 里 commit → push 就能直接用，不会再弹登录。
 
-Claude Code 提交的内容放在 `代码/NUC修复/` 下，按日期和 NUC 编号区分：
+#### 方式 B：SSH Key（更专业，适合多台 NUC）
+
+**第 1 步：NUC 上生成 SSH 密钥**
+
+```bash
+ssh-keygen -t ed25519 -C "nuc1@cuadc" -f ~/.ssh/id_ed25519_github
+# 一路回车不设密码
+```
+
+**第 2 步：复制公钥**
+
+```bash
+cat ~/.ssh/id_ed25519_github.pub
+```
+
+**第 3 步：上传到 GitHub**
+
+1. 浏览器打开 https://github.com/settings/keys
+2. 点 `New SSH Key`
+3. Title 填 `NUC1`，Key 粘贴刚才复制的公钥
+4. 保存
+
+**第 4 步：用 SSH 地址克隆**
+
+```bash
+cd ~
+git clone git@github.com:SteveTNT111/GDPI_CUADC_2026.git
+```
+
+### VS Code 里 commit 和 push
+
+和普通电脑上一样：
+
+1. `Ctrl+Shift+G` 打开源代码管理
+2. 点你修改的文件的 `+` 号（stage）
+3. 上方输入框写提交信息，点 `✓`（commit）
+4. 点 `...` → `推送`（push）
+
+### NUC 修代码的提交规范
+
+NUC 上的修改（包括 Claude Code 的修改）放在 `代码/NUC修复/` 下，**不要直接改 cuadc_src/**。由伍尚京确认后手动合并进主分支。
 
 ```
 代码/NUC修复/
@@ -193,12 +271,6 @@ Claude Code 提交的内容放在 `代码/NUC修复/` 下，按日期和 NUC 编
     ├── detector_params.yaml
     └── detector_params.md
 ```
-
-### 说明
-
-Claude Code 在 NUC 上相当于一个**虚拟队员**。它的修改也走同样的 `add → commit → push` 流程，和其他队员没有区别。唯一要注意的是用 `NUC修复/` 文件夹而不是直接改 `cuadc_src/`——NUC 上的修复由伍尚京确认后手动合并进主分支。
-
----
 
 ## NUC 同步计划
 
