@@ -312,14 +312,21 @@ rostopic echo /competition/target_global
 
 **启动命令：**
 
+**① 实际飞行用**——解锁自动开始，上锁自动停止：
+
 ```bash
-# ① 实际飞行用——解锁自动开始，上锁自动停止
 roslaunch cuadc_vision run_flight_recorder.launch
+```
 
-# ② 地面调试——开窗口看叠加效果
+**② 地面调试**——开窗口看叠加效果：
+
+```bash
 roslaunch cuadc_vision run_flight_recorder.launch show_window:=true
+```
 
-# ③ 不等解锁，立即开始录（纯地面测试）
+**③ 不等解锁，立即开始录**（纯地面测试）：
+
+```bash
 roslaunch cuadc_vision run_flight_recorder.launch record_immediately:=true show_window:=true
 ```
 
@@ -347,11 +354,15 @@ roslaunch cuadc_vision run_flight_recorder.launch record_immediately:=true show_
 
 **启动命令：**
 
-```bash
-# ① 默认参数
-roslaunch cuadc_vision auto_drop.launch
+**① 默认参数**：
 
-# ② 放宽对准要求 + 提高置信度
+```bash
+roslaunch cuadc_vision auto_drop.launch
+```
+
+**② 放宽对准要求 + 提高置信度**：
+
+```bash
 roslaunch cuadc_vision auto_drop.launch pixel_threshold:=30.0 min_conf:=0.7
 ```
 

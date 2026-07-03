@@ -5,20 +5,26 @@
 servo_test.py — CUADC 2026 抛投器舵机测试节点
 
 功能：
-  1. 通过 MAVROS RC Override 控制飞控 5/6 通道舵机
+  1. 通过 MAVROS MAV_CMD_DO_SET_SERVO 直接控制飞控舵机输出（不依赖 SERVOx_FUNCTION）
   2. 终端交互模式：手动输入 on/off 控制舵机开关
   3. ROS 话题控制：订阅 /servo/cmd 话题接收控制指令
   4. PWM: 1100 = 关闭, 1400 = 打开
+  5. 实时显示飞控连接状态和心跳
 
 通道说明：
-  - 5 通道 (CH5)：抛投器 1 舵机  [默认启用]
-  - 6 通道 (CH6)：抛投器 2 舵机  [默认禁用]
+  - 5 通道 (SERVO5)：抛投器 1 舵机  [默认启用]
+  - 6 通道 (SERVO6)：抛投器 2 舵机  [默认禁用]
   - 可使用一个舵机通过机械联动同时驱动两侧抛投器，
     也可使用两个舵机独立控制（启用 CH6 即可）
 
+飞控参数要求（ArduPilot）：
+  - RC_OVERRIDE_TIME > 0（允许外部 MAVLink 指令，默认 3s 即可）
+  - SERVO5_FUNCTION / SERVO6_FUNCTION 可以保持 0 (Disabled)，
+    因为 MAV_CMD_DO_SET_SERVO 不经过飞控逻辑，直接操作输出引脚
+
 依赖：
   - rospy
-  - mavros_msgs (OverrideRCIn)
+  - mavros_msgs (CommandLong, State)
   - std_msgs
 
 运行方式：
@@ -34,7 +40,8 @@ import sys
 import threading
 
 import rospy
-from mavros_msgs.msg import OverrideRCIn, State
+from mavros_msgs.msg import State
+from mavros_msgs.srv import CommandLong
 from std_msgs.msg import Bool, String
 
 # Python 2/3 兼容
@@ -45,11 +52,10 @@ except NameError:
 
 
 class ServoController:
-    """抛投器舵机控制"""
+    """抛投器舵机控制 —— 使用 MAV_CMD_DO_SET_SERVO"""
 
     def __init__(self):
         # ---------- 参数 ----------
-        # 通道开关
         self.enable_ch5 = rospy.get_param("~enable_ch5", True)
         self.enable_ch6 = rospy.get_param("~enable_ch6", False)
 
@@ -58,7 +64,7 @@ class ServoController:
         self.pwm_close = rospy.get_param("~pwm_close", 1100)
 
         # 初始状态
-        self.servo_open = False  # False = 关闭, True = 打开
+        self.servo_open = False
         self.lock = threading.Lock()
 
         # ---------- 飞控连接状态 ----------
@@ -69,22 +75,18 @@ class ServoController:
             "/mavros/state", State, self._state_cb, queue_size=10
         )
 
-        # ---------- MAVROS RC Override 发布 ----------
-        self.rc_pub = rospy.Publisher(
-            "/mavros/rc/override", OverrideRCIn, queue_size=10
-        )
+        # ---------- MAVROS 命令服务 ----------
+        self._cmd_srv = None
 
         # ---------- ROS 话题订阅 ----------
-        # /servo/cmd  (std_msgs/String): "on" / "off" / "open" / "close"
         self.cmd_sub = rospy.Subscriber(
             "/servo/cmd", String, self._string_cmd_cb, queue_size=10
         )
-        # /servo/open  (std_msgs/Bool): True=打开, False=关闭
         self.open_sub = rospy.Subscriber(
             "/servo/open", Bool, self._bool_cmd_cb, queue_size=10
         )
 
-        # 启动时先发送一次关闭信号
+        # 启动时先复位舵机
         rospy.sleep(0.5)
         self._set_servo(False)
 
@@ -97,47 +99,9 @@ class ServoController:
         )
         rospy.loginfo("终端命令: on/open = 打开  |  off/close = 关闭  |  q/quit = 退出")
 
-    # ==================== RC Override 核心 ====================
-
-    def _set_servo(self, state):
-        """设置舵机状态
-
-        Args:
-            state: True = 打开 (PWM=1400), False = 关闭 (PWM=1100)
-        """
-        pwm = self.pwm_open if state else self.pwm_close
-
-        msg = OverrideRCIn()
-        # MAVROS RC Override 默认值是 0 和 65535 (未覆盖)，
-        # 需要先填充默认值（UINT16_MAX 表示不覆盖该通道）
-        msg.channels = [65535] * 18
-
-        if self.enable_ch5:
-            msg.channels[4] = pwm  # CH5 = index 4
-        if self.enable_ch6:
-            msg.channels[5] = pwm  # CH6 = index 5
-
-        self.rc_pub.publish(msg)
-
-        with self.lock:
-            self.servo_open = state
-
-        action = "打开" if state else "关闭"
-        channels = []
-        if self.enable_ch5:
-            channels.append("CH5")
-        if self.enable_ch6:
-            channels.append("CH6")
-
-        if not self.fc_connected:
-            rospy.logwarn("⚠️ 飞控未连接！舵机指令已发送到 /mavros/rc/override 但飞控不会响应")
-            rospy.logwarn("   请检查: 1)MAVROS是否运行 2)飞控USB是否插好 3)rostopic echo /mavros/state")
-        rospy.loginfo("舵机 %s → %s (PWM=%d) | %s", "+".join(channels), action, pwm, self._fc_status_str())
-
-    # ==================== 回调 ====================
+    # ==================== 飞控连接 ====================
 
     def _state_cb(self, msg):
-        """飞控状态回调"""
         prev = self.fc_connected
         self.fc_connected = msg.connected
         self.fc_armed = msg.armed
@@ -149,23 +113,101 @@ class ServoController:
                 rospy.logwarn("❌ 飞控连接断开！")
 
     def _fc_status_str(self):
-        """返回飞控状态字符串"""
         if self.fc_connected:
             return "飞控: ✅ 已连接 | armed=%s | mode=%s" % (self.fc_armed, self.fc_mode)
         else:
-            return "飞控: ❌ 未连接 —— 请检查 MAVROS 和飞控连线"
+            return "飞控: ❌ 未连接 —— 检查 MAVROS 和飞控连线"
+
+    def _ensure_service(self):
+        """确保 /mavros/cmd/command 服务可用"""
+        if self._cmd_srv is not None:
+            return True
+        try:
+            rospy.wait_for_service("/mavros/cmd/command", timeout=3.0)
+            self._cmd_srv = rospy.ServiceProxy("/mavros/cmd/command", CommandLong)
+            return True
+        except rospy.ROSException:
+            return False
+
+    # ==================== 舵机控制核心 ====================
+
+    def _set_servo(self, state):
+        """通过 MAV_CMD_DO_SET_SERVO (command=183) 直接设置舵机 PWM
+
+        不依赖飞控的 SERVOx_FUNCTION，直接操作硬件输出引脚。
+        """
+        pwm = self.pwm_open if state else self.pwm_close
+        action = "打开" if state else "关闭"
+
+        channels_info = []
+        if self.enable_ch5:
+            channels_info.append("SERVO5")
+        if self.enable_ch6:
+            channels_info.append("SERVO6")
+        ch_str = "+".join(channels_info)
+
+        # 检查飞控连接
+        if not self.fc_connected:
+            rospy.logwarn("⚠️ 飞控未连接！无法控制舵机")
+            rospy.logwarn("   请检查: 1) MAVROS 是否运行  2) 飞控 USB 是否插好")
+            rospy.logwarn("   验证: rostopic echo /mavros/state")
+            return
+
+        # 检查命令服务
+        if not self._ensure_service():
+            rospy.logerr("❌ /mavros/cmd/command 服务不可用，MAVROS 是否正常运行？")
+            return
+
+        # 逐一发送舵机指令
+        ok = True
+        if self.enable_ch5:
+            ok = self._call_set_servo(5, pwm) and ok
+        if self.enable_ch6:
+            ok = self._call_set_servo(6, pwm) and ok
+
+        if ok:
+            with self.lock:
+                self.servo_open = state
+            rospy.loginfo("舵机 %s → %s (PWM=%d) | %s", ch_str, action, pwm, self._fc_status_str())
+        else:
+            rospy.logerr("舵机 %s → %s 失败 | %s", ch_str, action, self._fc_status_str())
+
+    def _call_set_servo(self, servo_num, pwm):
+        """发送 MAV_CMD_DO_SET_SERVO 指令
+
+        command=183: MAV_CMD_DO_SET_SERVO
+        param1=servo_num: 舵机编号 (5=SERVO5, 6=SERVO6)
+        param2=pwm: PWM 微秒值
+        """
+        try:
+            resp = self._cmd_srv(
+                broadcast=False,
+                command=183,         # MAV_CMD_DO_SET_SERVO
+                confirmation=0,
+                param1=float(servo_num),
+                param2=float(pwm),
+                param3=0.0,
+                param4=0.0,
+                param5=0.0,
+                param6=0.0,
+                param7=0.0,
+            )
+            return resp.success
+        except rospy.ServiceException as e:
+            rospy.logerr("MAV_CMD_DO_SET_SERVO(SERVO%d, %d) 调用失败: %s", servo_num, pwm, e)
+            self._cmd_srv = None
+            return False
+
+    # ==================== 回调 ====================
 
     def _string_cmd_cb(self, msg):
-        """/servo/cmd 话题回调（String 指令）"""
         cmd = msg.data.strip().lower()
         self._handle_command(cmd)
 
     def _bool_cmd_cb(self, msg):
-        """/servo/open 话题回调（Bool 指令）"""
         self._set_servo(msg.data)
 
     def _handle_command(self, cmd):
-        """解析并执行指令"""
         if cmd in ("on", "open", "1", "true"):
             self._set_servo(True)
         elif cmd in ("off", "close", "0", "false"):
@@ -179,15 +221,16 @@ class ServoController:
     # ==================== 终端交互 ====================
 
     def _terminal_loop(self):
-        """终端输入线程 —— 手动控制舵机"""
+        rospy.sleep(1.0)  # 等 state 回调更新
         print("")
-        print("=" * 50)
-        print("  舵机测试终端")
+        print("=" * 55)
+        print("  舵机测试终端  —  MAV_CMD_DO_SET_SERVO")
         print("  %s" % self._fc_status_str())
         print("  输入 on/open  → 打开抛投器 (PWM=%d)" % self.pwm_open)
         print("  输入 off/close → 关闭抛投器 (PWM=%d)" % self.pwm_close)
+        print("  输入 status    → 刷新飞控连接状态")
         print("  输入 q/quit    → 退出")
-        print("=" * 50)
+        print("=" * 55)
         print("")
 
         while not rospy.is_shutdown():
@@ -199,6 +242,9 @@ class ServoController:
                     rospy.loginfo("用户退出舵机终端")
                     rospy.signal_shutdown("用户退出")
                     break
+                if cmd == "status":
+                    print("  %s" % self._fc_status_str())
+                    continue
                 self._handle_command(cmd)
             except (EOFError, KeyboardInterrupt):
                 rospy.loginfo("终端输入中断")
@@ -207,11 +253,9 @@ class ServoController:
     # ==================== 主入口 ====================
 
     def run(self):
-        """启动终端交互线程并进入 ROS spin"""
         terminal_thread = threading.Thread(target=self._terminal_loop)
         terminal_thread.daemon = True
         terminal_thread.start()
-
         rospy.spin()
 
 
