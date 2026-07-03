@@ -34,7 +34,7 @@ import sys
 import threading
 
 import rospy
-from mavros_msgs.msg import OverrideRCIn
+from mavros_msgs.msg import OverrideRCIn, State
 from std_msgs.msg import Bool, String
 
 # Python 2/3 兼容
@@ -60,6 +60,14 @@ class ServoController:
         # 初始状态
         self.servo_open = False  # False = 关闭, True = 打开
         self.lock = threading.Lock()
+
+        # ---------- 飞控连接状态 ----------
+        self.fc_connected = False
+        self.fc_armed = False
+        self.fc_mode = "unknown"
+        self._state_sub = rospy.Subscriber(
+            "/mavros/state", State, self._state_cb, queue_size=10
+        )
 
         # ---------- MAVROS RC Override 发布 ----------
         self.rc_pub = rospy.Publisher(
@@ -120,9 +128,32 @@ class ServoController:
             channels.append("CH5")
         if self.enable_ch6:
             channels.append("CH6")
-        rospy.loginfo("舵机 %s → %s (PWM=%d)", "+".join(channels), action, pwm)
+
+        if not self.fc_connected:
+            rospy.logwarn("⚠️ 飞控未连接！舵机指令已发送到 /mavros/rc/override 但飞控不会响应")
+            rospy.logwarn("   请检查: 1)MAVROS是否运行 2)飞控USB是否插好 3)rostopic echo /mavros/state")
+        rospy.loginfo("舵机 %s → %s (PWM=%d) | %s", "+".join(channels), action, pwm, self._fc_status_str())
 
     # ==================== 回调 ====================
+
+    def _state_cb(self, msg):
+        """飞控状态回调"""
+        prev = self.fc_connected
+        self.fc_connected = msg.connected
+        self.fc_armed = msg.armed
+        self.fc_mode = msg.mode
+        if prev != self.fc_connected:
+            if self.fc_connected:
+                rospy.loginfo("✅ 飞控已连接 | armed=%s mode=%s", self.fc_armed, self.fc_mode)
+            else:
+                rospy.logwarn("❌ 飞控连接断开！")
+
+    def _fc_status_str(self):
+        """返回飞控状态字符串"""
+        if self.fc_connected:
+            return "飞控: ✅ 已连接 | armed=%s | mode=%s" % (self.fc_armed, self.fc_mode)
+        else:
+            return "飞控: ❌ 未连接 —— 请检查 MAVROS 和飞控连线"
 
     def _string_cmd_cb(self, msg):
         """/servo/cmd 话题回调（String 指令）"""
@@ -152,6 +183,7 @@ class ServoController:
         print("")
         print("=" * 50)
         print("  舵机测试终端")
+        print("  %s" % self._fc_status_str())
         print("  输入 on/open  → 打开抛投器 (PWM=%d)" % self.pwm_open)
         print("  输入 off/close → 关闭抛投器 (PWM=%d)" % self.pwm_close)
         print("  输入 q/quit    → 退出")

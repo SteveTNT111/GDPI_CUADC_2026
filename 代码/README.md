@@ -1,8 +1,12 @@
 # 代码文件夹
 
 > CUADC 2026 全部飞行代码。**本文件夹推送到 GitHub。**
-> NUC 机载电脑只需拉取其中的 `cuadc_src/` 子目录到 `~/catkin_ws/src/` 即可编译运行，
-> 详见下方"如何获取代码"。各节点的运行命令见 [cuadc_src/src_README.md](cuadc_src/src_README.md)。
+>
+> ⚠️ **角色分工：**
+> - **Windows 个人电脑：** 用 VS Code 编辑代码 + Git 提交推送，不需要装 ROS，不需要跑任何命令
+> - **NUC 机载电脑（Ubuntu 20.04）：** 拉取代码 → 编译 → 运行，下面所有终端命令都在 NUC 上执行
+>
+> NUC 只需拉取 `cuadc_src/` 到 `~/catkin_ws/src/` 即可，详见下方"如何获取代码"。各节点的运行命令见 [cuadc_src/src_README.md](cuadc_src/src_README.md)。
 
 ---
 
