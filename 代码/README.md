@@ -101,13 +101,67 @@
 ## 如何获取代码
 
 > 仓库地址：`https://github.com/SteveTNT111/GDPI_CUADC_2026`
-> 不管你是在 NUC、个人笔记本、还是实验室台式机上操作，都适用。
 
-### 场景一：只想要 cuadc_src（NUC 部署推荐）
+### NUC 部署（最常用）
 
-用 VS Code 终端（`Ctrl+`` `）逐步执行：
+直接把整个仓库克隆下来，然后把 `cuadc_src` 复制到 ROS 工作空间里编译。
 
-**第 1 步：创建空仓库并设置稀疏检出**
+**首次部署：**
+
+```bash
+# 1. 克隆整个仓库到 NUC
+cd ~
+git clone https://github.com/SteveTNT111/GDPI_CUADC_2026.git
+```
+
+```bash
+# 2. 复制 cuadc_src 到 ROS 工作空间
+rm -rf ~/catkin_ws/src/cuadc_src
+cp -r ~/GDPI_CUADC_2026/代码/cuadc_src ~/catkin_ws/src/cuadc_src
+```
+
+```bash
+# 3. 安装依赖（首次需要）
+sudo apt install -y \
+  ros-noetic-cv-bridge \
+  ros-noetic-image-transport \
+  ros-noetic-tf2-ros \
+  ros-noetic-tf2-geometry-msgs \
+  ros-noetic-mavros-msgs \
+  ros-noetic-mavros
+pip3 install pyrealsense2 opencv-python geographiclib ultralytics rospkg
+```
+
+```bash
+# 4. 编译
+cd ~/catkin_ws
+catkin_make
+source devel/setup.bash
+```
+
+```bash
+# 5. 脚本加执行权限
+chmod +x ~/catkin_ws/src/cuadc_src/scripts/*.py
+```
+
+```bash
+# 6. 放入 YOLO 模型文件（不入库，需手动复制）
+# 把 best.pt 放到 ~/catkin_ws/src/cuadc_src/models/best.pt
+```
+
+**后续拉取最新代码：**
+
+```bash
+cd ~/GDPI_CUADC_2026
+git pull origin main
+rm -rf ~/catkin_ws/src/cuadc_src
+cp -r 代码/cuadc_src ~/catkin_ws/src/cuadc_src
+cd ~/catkin_ws && catkin_make && source devel/setup.bash
+```
+
+### NUC 部署（省空间）
+
+如果 NUC 硬盘紧张，用稀疏检出只拉 `cuadc_src`，不下载整个仓库：
 
 ```bash
 mkdir -p ~/cuadc_sparse && cd ~/cuadc_sparse
@@ -115,68 +169,35 @@ git init
 git remote add origin https://github.com/SteveTNT111/GDPI_CUADC_2026.git
 ```
 
-**第 2 步：配置只拉取 代码/cuadc_src**
-
 ```bash
 git config core.sparseCheckout true
 echo "代码/cuadc_src/" >> .git/info/sparse-checkout
 ```
 
-**第 3 步：拉取（只下载几 MB）**
-
 ```bash
 git pull origin main
 ```
 
-**第 4 步：复制到 ROS 工作空间**
-
 ```bash
 rm -rf ~/catkin_ws/src/cuadc_src
 cp -r 代码/cuadc_src ~/catkin_ws/src/cuadc_src
+cd ~ && rm -rf ~/cuadc_sparse
 ```
 
-**第 5 步：清理临时目录，编译**
-
 ```bash
-cd ~ && rm -rf ~/cuadc_sparse
 cd ~/catkin_ws && catkin_make && source devel/setup.bash
 ```
 
-### 场景二：克隆整个仓库
+### 个人电脑开发
 
-适用于：个人电脑上开发、或者 NUC 网速快空间大图省事。
-
-VS Code 图形界面：`Ctrl+Shift+P` → `Git: Clone` → 输入仓库 URL → 选目录。
-
-或终端：
+VS Code 图形界面：`Ctrl+Shift+P` → `Git: Clone` → 输入仓库 URL → 选目录。或用终端：
 
 ```bash
 cd ~
 git clone https://github.com/SteveTNT111/GDPI_CUADC_2026.git
-
-# NUC 上额外执行：复制到工作空间
-rm -rf ~/catkin_ws/src/cuadc_src
-cp -r ~/GDPI_CUADC_2026/代码/cuadc_src ~/catkin_ws/src/cuadc_src
 ```
 
-### 场景三：已有克隆，更新代码
-
-```bash
-cd ~/GDPI_CUADC_2026
-git pull origin main
-
-# NUC 上额外：重新覆盖工作空间
-cp -r 代码/cuadc_src ~/catkin_ws/src/cuadc_src
-cd ~/catkin_ws && catkin_make
-```
-
-### 方案对比
-
-| | 场景一（稀疏检出） | 场景二/三（全量克隆） |
-|---|---|---|
-| 下载量 | ~5 MB | ~200+ MB |
-| 操作步骤 | 5 条命令 | 2 条命令 |
-| 适用 | 网速慢、NUC 空间紧张 | 开发调试、图省事 |
+开发完成后在 `代码/你的名字/` 下提交，不需要编译 ROS。
 
 ---
 
