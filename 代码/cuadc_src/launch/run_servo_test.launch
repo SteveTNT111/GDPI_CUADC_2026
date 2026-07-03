@@ -26,11 +26,21 @@
       rostopic pub /servo/open std_msgs/Bool "data: false"
   -->
 
-  <!-- ==================== 参数 ==================== -->
+  <!-- ==================== MAVROS 参数 ==================== -->
+  <arg name="fcu_url" default="/dev/ttyACM0:921600" />
+  <arg name="auto_start_mavros" default="true" />
+
+  <!-- ==================== 舵机参数 ==================== -->
   <arg name="enable_ch5" default="true" />
   <arg name="enable_ch6" default="false" />
   <arg name="pwm_open" default="1400" />
   <arg name="pwm_close" default="1100" />
+
+  <!-- ==================== 自动启动 MAVROS ==================== -->
+  <include if="$(arg auto_start_mavros)"
+           file="$(find mavros)/launch/apm.launch">
+    <arg name="fcu_url" value="$(arg fcu_url)" />
+  </include>
 
   <!-- ==================== 舵机控制节点 ==================== -->
   <node pkg="cuadc_vision"
