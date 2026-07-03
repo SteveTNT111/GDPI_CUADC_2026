@@ -134,15 +134,15 @@ roslaunch cuadc_vision run_main.launch auto_arm:=true auto_takeoff:=true takeoff
 
 **启动文件：** `run_servo_test.launch`
 
-**功能：** 通过 MAVLink `MAV_CMD_DO_SET_SERVO` 指令直接控制飞控舵机输出引脚，不经过飞控逻辑（无需设置 SERVOx_FUNCTION）。PWM 1100 = 关闭，1400 = 打开。
+**功能：** 通过 MAVLink `MAV_CMD_DO_SET_SERVO` 指令直接控制飞控舵机输出引脚（SERVO5），不经过飞控逻辑（无需设置 SERVOx_FUNCTION）。单舵机联动双抛投器：PWM 1000 = 全关，1500 = 仅第一个开，2000 = 全开。
 
 **飞控参数要求：** `SERVO5_FUNCTION` / `SERVO6_FUNCTION` 保持 **0 (Disabled)**，飞控不碰这个引脚。`RC_OVERRIDE_TIME` 必须 > 0（默认 3 即可），设成 0 会拒绝所有外部指令。
 
 **测试什么：** 验证舵机接线是否正确、PWM 值是否能驱动抛投器、机械结构是否顺畅。**不需要飞机起飞，地上就能测。**
 
 **启动后你可以：**
-- 在终端输入 `on` → 舵机转到打开位置（PWM 1400），抛投器释放
-- 在终端输入 `off` → 舵机转回关闭位置（PWM 1100），抛投器复位
+- 在终端输入 `on` → 舵机转到 PWM 2000，两个抛投器都打开
+- 在终端输入 `off` → 舵机转到 PWM 1000，两个抛投器都关闭
 - 输入 `q` 退出
 - 也可以通过 ROS 话题远程控制（见下方）
 
