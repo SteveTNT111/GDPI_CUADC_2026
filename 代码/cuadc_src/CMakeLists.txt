@@ -22,6 +22,7 @@ catkin_install_python(PROGRAMS
   scripts/main.py scripts/servo_test.py
   scripts/flight_data_video_recorder_node.py
   scripts/auto_drop_node.py
+  scripts/video_recorder_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
