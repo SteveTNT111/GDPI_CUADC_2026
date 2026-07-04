@@ -73,8 +73,17 @@ pip3 install pyrealsense2 opencv-python geographiclib ultralytics
 
 ```bash
 cd ~/catkin_ws
+```
+
+```bash
 catkin_make
+```
+
+```bash
 source devel/setup.bash
+```
+
+```bash
 chmod +x ~/catkin_ws/src/cuadc_src/scripts/*.py
 ```
 
@@ -164,6 +173,9 @@ roslaunch cuadc_vision run_servo_test.launch enable_ch6:=true
 ```bash
 # ③ 通过 ROS 话题控制（另开终端，无需交互）
 rostopic pub /servo/cmd std_msgs/String "data: 'on'"
+```
+
+```bash
 rostopic pub /servo/cmd std_msgs/String "data: 'off'"
 ```
 
@@ -367,14 +379,21 @@ rostopic hz /vision/color/image_raw   # 应该有稳定 30Hz 输出
 
 **启动命令：**
 
+**① 首次测试——CPU 推理：**
+
 ```bash
-# ① 首次测试——CPU 推理
 roslaunch cuadc_vision detector_node.launch
+```
 
-# ② GPU 推理 + 提高阈值
+**② GPU 推理 + 提高阈值：**
+
+```bash
 roslaunch cuadc_vision detector_node.launch yolo_device:=cuda:0 yolo_conf_threshold:=0.7
+```
 
-# ③ 自定义模型
+**③ 自定义模型：**
+
+```bash
 roslaunch cuadc_vision detector_node.launch yolo_model_path:=/home/lab/my_model.pt
 ```
 
@@ -530,17 +549,27 @@ roslaunch cuadc_vision auto_drop.launch pixel_threshold:=30.0 min_conf:=0.7
 
 ## 比赛完整启动
 
+**1. 启动 MAVROS（终端 1）：**
+
 ```bash
-# 1. 启动 MAVROS
 roslaunch mavros apm.launch fcu_url:=/dev/ttyACM0:921600
+```
 
-# 2. 启动总控
+**2. 启动总控（终端 2）：**
+
+```bash
 roslaunch cuadc_vision run_main.launch auto_arm:=false auto_takeoff:=false
+```
 
-# 3（可选）. 自动抛投
+**3（可选）. 自动抛投（终端 3）：**
+
+```bash
 roslaunch cuadc_vision auto_drop.launch
+```
 
-# 4（可选）. 飞行录像
+**4（可选）. 飞行录像（终端 4）：**
+
+```bash
 roslaunch cuadc_vision run_flight_recorder.launch
 ```
 
