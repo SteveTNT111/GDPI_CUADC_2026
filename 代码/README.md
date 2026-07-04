@@ -27,7 +27,8 @@
 │   │   └── auto_drop_node.py                    #     自动抛投：检测对准后自动触发舵机释放
 │   ├── launch/                                  #   启动文件
 │   │   ├── run_main.launch                      #     总启动：主控 + 相机 + YOLO + 坐标变换
-│   │   ├── cuadc_run.launch                     #     视觉管线启动（相机 + 检测 + geopose）
+│   │   ├── camera_node.launch                   #     D435i 相机（配合 rviz）
+│   │   ├── detector_node.launch                 #     YOLO 检测（相机 + OpenCV 窗口）
 │   │   ├── run_servo_test.launch               #     舵机测试终端（手动 on/off）
 │   │   ├── run_flight_recorder.launch           #     飞行数据录像（解锁自动录，叠加高度/GPS/电压）
 │   │   └── auto_drop.launch                     #     自动抛投触发
@@ -80,8 +81,8 @@
 |------|------|---------|
 | `main.py` | 状态机主控：切换飞行模式 → 起飞 → 巡航 → 识别 → 对准 → 投放 → 返航 | `roslaunch cuadc_vision run_main.launch` |
 | `servo_test.py` | 舵机测试：终端输入 `on`/`off` 控制 5/6 通道 PWM（1100/1400） | `roslaunch cuadc_vision run_servo_test.launch` |
-| `camera_node.py` | D435i 驱动，发布 RGB + 深度图 | 由 run_main.launch 或 cuadc_run.launch 自动启动 |
-| `detector_node.py` | YOLO + 传统CV 检测，发布目标位置 | 由 run_main.launch 或 cuadc_run.launch 自动启动 |
+| `camera_node.py` | D435i 驱动，发布 RGB + 深度图 | `roslaunch cuadc_vision camera_node.launch` |
+| `detector_node.py` | YOLO 目标检测，弹 OpenCV 窗口 | `roslaunch cuadc_vision detector_node.launch` |
 | `geopose_node.py` | 相机系 → 机体 → ENU → 大地坐标变换 | 由 run_main.launch 自动启动（可选） |
 | `flight_data_video_recorder_node.py` | 飞行数据录像：解锁自动录制，画面叠加高度/GPS/电压 | `roslaunch cuadc_vision run_flight_recorder.launch` |
 | `auto_drop_node.py` | 自动抛投：检测目标对准光心后自动触发舵机释放 | `roslaunch cuadc_vision auto_drop.launch` |
@@ -91,7 +92,8 @@
 | 启动文件 | 包含节点 | 用途 |
 |---------|---------|------|
 | `run_main.launch` | main + camera + detector + geopose | **总启动**：完整比赛流程一键启动 |
-| `cuadc_run.launch` | camera + detector + geopose | 仅视觉管线（不含主控） |
+| `camera_node.launch` | camera | 相机驱动（配合 rviz 查看画面） |
+| `detector_node.launch` | camera + detector | YOLO 检测（带 OpenCV 窗口） |
 | `run_servo_test.launch` | servo_test | 舵机独立测试终端 |
 | `run_flight_recorder.launch` | camera + flight_data_video_recorder | 飞行数据录像（解锁自动录，用于航线规划） |
 | `auto_drop.launch` | detector + auto_drop | 自动抛投触发（检测对准→释放舵机） |

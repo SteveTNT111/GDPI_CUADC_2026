@@ -57,7 +57,7 @@ GDPI_CUADC_2026/
 │   ├── README.md                            #   代码目录详细说明
 │   ├── cuadc_src/                           #   🔒 主功能包（伍尚京维护）
 │   │   ├── scripts/                         #     main / servo_test / camera / detector / geopose / flight_recorder
-│   │   ├── launch/                          #     run_main / cuadc_run / run_servo_test / run_flight_recorder / auto_drop
+│   │   ├── launch/                          #     camera_node / detector_node / run_main / run_servo_test / run_flight_recorder / auto_drop
 │   │   ├── config/                          #     params.yaml
 │   │   ├── msg/                             #     自定义 ROS 消息
 │   │   └── models/                          #     YOLO 模型存放（best.pt 不入库，需手动放入）

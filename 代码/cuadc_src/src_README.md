@@ -185,18 +185,27 @@ rostopic pub /servo/cmd std_msgs/String "data: 'off'"
 
 **启动命令：**
 
-```bash
-# 打开相机，用 rviz 看画面
-roslaunch cuadc_vision camera_node.launch
-# 另开终端：rviz
-rviz
+**① 默认 30FPS：**
 
-# 或用 rqt 快速看
-rosrun rqt_image_view rqt_image_view /vision/color/image_raw
+```bash
+roslaunch cuadc_vision camera_node.launch
+```
+
+查看画面（另开终端，二选一）：
+
+```bash
+# rviz（功能全，Add → By topic → /vision/color/image_raw）
+rviz
 ```
 
 ```bash
-# USB 不稳定时降帧率
+# rqt 快速看
+rosrun rqt_image_view rqt_image_view /vision/color/image_raw
+```
+
+**② USB 不稳定时降帧率：**
+
+```bash
 roslaunch cuadc_vision camera_node.launch fps:=15
 ```
 
