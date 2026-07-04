@@ -25,6 +25,25 @@ def get_bool_param(name, default):
 
 
 class DetectorNode:
+    @staticmethod
+    def _make_img_msg(array, encoding):
+        """Construct a sensor_msgs/Image from a numpy array without cv_bridge.
+
+        cv_bridge on ROS Noetic + OpenCV 4.x has a bug where cvtype_to_name
+        is missing keys (e.g. CV_8UC3=16) that encoding_to_cvtype2 produces,
+        causing KeyError when encoding "bgr8" is used.
+        """
+        if not array.flags["C_CONTIGUOUS"]:
+            array = np.ascontiguousarray(array)
+        msg = Image()
+        msg.height = array.shape[0]
+        msg.width = array.shape[1]
+        msg.encoding = encoding
+        msg.is_bigendian = False
+        msg.step = int(array.shape[1] * array.dtype.itemsize)
+        msg.data = array.tobytes()
+        return msg
+
     def __init__(self):
         _default_model = os.path.join(rospkg.RosPack().get_path('cuadc_vision'), 'models', 'best.pt')
         self.model_path = os.path.expanduser(rospy.get_param("~model_path", _default_model))
@@ -106,7 +125,7 @@ class DetectorNode:
 
         self.result_pub.publish(result_msg)
         self.results_pub.publish(detections_msg)
-        annotated_msg = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
+        annotated_msg = self._make_img_msg(annotated, "bgr8")
         annotated_msg.header = msg.header
         self.annotated_pub.publish(annotated_msg)
 
