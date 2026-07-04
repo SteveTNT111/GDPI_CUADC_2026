@@ -76,7 +76,7 @@ class DetectorNode:
         # 只保留名称包含这些关键词的目标（逗号分隔）
         target_str = rospy.get_param(
             "~target_classes",
-            "cylinder,tong,barrel,can,yuantong,white_cylinder,tube,drum"
+            "cylinder,tong,barrel,can,yuantong,white_cylinder,tube,drum,bucket"
         )
         self.target_classes = [c.strip().lower() for c in target_str.split(",") if c.strip()]
 
@@ -139,6 +139,20 @@ class DetectorNode:
 
         rospy.loginfo("Detector started. model=%s conf=%.2f imgsz=%d device=%s",
                        self.model_path, self.conf_threshold, self.imgsz, self.device)
+
+    @staticmethod
+    def _make_img_msg(array, encoding):
+        """Construct sensor_msgs/Image directly to avoid cv_bridge bgr8 KeyError."""
+        if not array.flags["C_CONTIGUOUS"]:
+            array = np.ascontiguousarray(array)
+        msg = Image()
+        msg.height = array.shape[0]
+        msg.width = array.shape[1]
+        msg.encoding = encoding
+        msg.is_bigendian = False
+        msg.step = int(array.shape[1] * array.shape[2] * array.dtype.itemsize)
+        msg.data = array.tobytes()
+        return msg
 
     # ========================================================================
     # 回调：接收数据
@@ -245,9 +259,7 @@ class DetectorNode:
         # 第 5 步：发布
         self.result_pub.publish(result_msg)
         self.results_pub.publish(detections_msg)
-        # 强制连续化 —— OpenCV 画图操作可能破坏数组连续性，导致 cv_bridge 报 KeyError
-        annotated = np.ascontiguousarray(annotated)
-        annotated_msg = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
+        annotated_msg = self._make_img_msg(annotated, encoding="bgr8")
         annotated_msg.header = msg.header
         self.annotated_pub.publish(annotated_msg)
 
@@ -312,11 +324,13 @@ class DetectorNode:
 
         best = None
         best_conf = -1.0
+        filtered_class_names = set()
         for box in boxes:
             det = self.build_single(header, yolo_result, box, image_shape)
 
             # 类别过滤：不在此列表的直接丢弃
             if not self._is_target_class(det.class_name):
+                filtered_class_names.add(det.class_name)
                 continue
 
             detections_msg.detections.append(det)
@@ -324,6 +338,16 @@ class DetectorNode:
                 best_conf = det.confidence
                 best_msg = det
                 best = det
+
+        # 有检测但全部被过滤 → 打印警告，方便排查类别名不匹配
+        if filtered_class_names and not detections_msg.detections:
+            rospy.logwarn_throttle(
+                5.0,
+                "YOLO detected %d object(s) but all filtered out. "
+                "Detected classes: %s. Target keywords: %s",
+                len(boxes), list(filtered_class_names), self.target_classes
+            )
+
         return best_msg, detections_msg, best
 
     def _is_target_class(self, class_name):

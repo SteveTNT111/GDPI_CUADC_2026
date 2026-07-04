@@ -368,30 +368,36 @@ rostopic hz /vision/color/image_raw   # 应该有稳定 30Hz 输出
 
 **启动文件：** `detector_node.launch`
 
-**功能：** 一键启动 D435i 相机 + YOLO 检测，弹出 OpenCV 窗口显示实时标注画面。加载 YOLOv8 模型逐帧推理，发布检测结果。
+**功能：** 一键启动 D435i 相机 + YOLO 检测。可选弹出 OpenCV 窗口显示实时标注画面，加载 YOLOv8 模型逐帧推理，发布检测结果。
 
 **测试什么：** 验证模型能否正确识别圆筒、置信度是否够高、检测帧率是否满足实时要求。
 
 **启动后你可以：**
-- 自动弹出 `YOLO Detection` 窗口，实时看到检测框和距离标注
-- 用 `rostopic echo /yolo/detection` 查看检测数据
+- 加 `show_window:=true` 时弹出 `YOLO Detection` 窗口，实时看到检测框和距离标注
+- 用 `rostopic echo /vision/yolo/detection` 查看检测数据
 - 拿着圆筒在相机前移动，观察检测框是否跟随
 
 **启动命令：**
 
-**① 首次测试——CPU 推理：**
+**① 首次测试——CPU 推理（无窗口）：**
 
 ```bash
 roslaunch cuadc_vision detector_node.launch
 ```
 
-**② GPU 推理 + 提高阈值：**
+**② 地面调试——带画面窗口：**
+
+```bash
+roslaunch cuadc_vision detector_node.launch show_window:=true
+```
+
+**③ GPU 推理 + 提高阈值：**
 
 ```bash
 roslaunch cuadc_vision detector_node.launch yolo_device:=cuda:0 yolo_conf_threshold:=0.7
 ```
 
-**③ 自定义模型：**
+**④ 自定义模型：**
 
 ```bash
 roslaunch cuadc_vision detector_node.launch yolo_model_path:=/home/lab/my_model.pt
@@ -405,7 +411,22 @@ roslaunch cuadc_vision detector_node.launch yolo_model_path:=/home/lab/my_model.
 | `/vision/yolo/detections` | YoloDetections | 当前帧全部目标 |
 | `/vision/annotated_image` | sensor_msgs/Image | 标注画面 |
 
-**验证是否正常：** 窗口弹出且画面流畅，终端打印 `Detector started. model=...`，拿着圆筒在镜头前目标框跟随移动。
+**验证是否正常：** 终端打印 `Detector started. model=...`，拿着圆筒在镜头前目标框跟随移动；如果加了 `show_window:=true`，窗口应正常弹出且画面流畅。
+
+**FPS 基准测试（NUC i7-1265U，CPU 推理，imgsz=640）：**
+
+| 模型 | FPS | 备注 |
+|------|-----|------|
+| YOLOv8n | ~18.6 | 最快，精度略低 |
+| YOLOv8s | ~8.6 | 精度更高但偏慢 |
+
+> 比赛推荐用 YOLOv8n，18.6 FPS 满足实时性要求。如果后续换 NUC 带 GPU（如 NUC 14 Pro+ 配 Arc GPU），可切 `yolo_device:=cuda:0` 获得更高帧率。
+
+**测试检测脚本（同步开启画面窗口）：**
+
+```bash
+roslaunch cuadc_vision detector_node.launch show_window:=true
+```
 
 **预测框旁边显示的文字说明：**
 
@@ -642,6 +663,34 @@ cd ~/catkin_ws && catkin_make
 **D435i 不识别：** 插 USB 3.0 蓝色口，`realsense-viewer` 确认画面。
 
 **YOLO 报错：** `pip3 install ultralytics torch`
+
+**detector_node 报 `KeyError: 16` / `bad callback`：**
+典型报错：
+```text
+[ERROR] ... bad callback: <bound method DetectorNode.image_callback ...>
+File ".../detector_node.py", line ..., in image_callback
+  annotated_msg = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
+KeyError: 16
+```
+原因：ROS Noetic 自带的 `cv_bridge` 在部分 OpenCV 4 环境下，把 `bgr8` 图像转成 `sensor_msgs/Image` 时会触发内部映射错误。
+
+当前项目已在 `detector_node.py` 中绕开这个问题，改为手工构造 `sensor_msgs/Image`。如果你仍然看到这个报错，通常说明当前终端运行的还是旧代码或旧工作空间环境。
+
+```bash
+# 重新编译并重新 source
+cd ~/catkin_ws
+catkin_make
+source /opt/ros/noetic/setup.bash
+source ~/catkin_ws/devel/setup.bash
+
+# 带画面调试
+roslaunch cuadc_vision detector_node.launch show_window:=true
+```
+
+如果是在没有桌面环境的终端（例如 SSH）里调试，不要开窗口：
+```bash
+roslaunch cuadc_vision detector_node.launch
+```
 
 **TF 报错：** MAVROS 是否在运行？`rostopic list | grep mavros`
 
