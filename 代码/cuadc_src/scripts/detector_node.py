@@ -213,8 +213,9 @@ class DetectorNode:
         # 4b. 画画面中心的红色十字准心（标注相机光心位置）
         h, w = frame.shape[:2]
         cx_c, cy_c = w // 2, h // 2
-        cv2.drawMarker(annotated, (cx_c, cy_c), (0, 0, 255),
-                       cv2.MARKER_CROSS, 14, 1, cv2.LINE_AA)
+        r = 7
+        cv2.line(annotated, (cx_c - r, cy_c), (cx_c + r, cy_c), (0, 0, 255), 1)
+        cv2.line(annotated, (cx_c, cy_c - r), (cx_c, cy_c + r), (cx_c, 0, 255), 1)
 
         # 4c. 画最佳目标的详细标注（见 draw_overlay）
         if best is not None:
