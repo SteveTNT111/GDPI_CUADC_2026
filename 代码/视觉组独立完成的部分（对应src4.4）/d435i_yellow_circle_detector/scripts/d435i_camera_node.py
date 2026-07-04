@@ -7,7 +7,6 @@ import cv2
 import numpy as np
 import pyrealsense2 as rs
 import rospy
-from cv_bridge import CvBridge
 from sensor_msgs.msg import CameraInfo, Image
 
 
@@ -74,7 +73,6 @@ class D435iCameraNode:
         depth_topic = rospy.get_param("~depth_topic", "/d435i/aligned_depth/image_raw")
         camera_info_topic = rospy.get_param("~camera_info_topic", "/d435i/color/camera_info")
 
-        self.bridge = CvBridge()
         self.color_pub = rospy.Publisher(color_topic, Image, queue_size=1)
         self.depth_pub = rospy.Publisher(depth_topic, Image, queue_size=1)
         self.camera_info_pub = rospy.Publisher(camera_info_topic, CameraInfo, queue_size=1)
@@ -298,6 +296,25 @@ class D435iCameraNode:
         ]
         return camera_info
 
+    @staticmethod
+    def _make_img_msg(array, encoding):
+        """Construct a sensor_msgs/Image from a numpy array without cv_bridge.
+
+        cv_bridge on ROS Noetic + OpenCV 4.x has a bug where cvtype_to_name
+        is missing keys (e.g. CV_8UC3=16) that encoding_to_cvtype2 produces,
+        causing KeyError when encoding "bgr8" is used.
+        """
+        if not array.flags["C_CONTIGUOUS"]:
+            array = np.ascontiguousarray(array)
+        msg = Image()
+        msg.height = array.shape[0]
+        msg.width = array.shape[1]
+        msg.encoding = encoding
+        msg.is_bigendian = False
+        msg.step = int(array.shape[1] * array.dtype.itemsize)
+        msg.data = array.tobytes()
+        return msg
+
     def convert_color_frame_to_bgr(self, color_frame):
         frame_profile = color_frame.get_profile().as_video_stream_profile()
         width = int(frame_profile.width())
@@ -433,8 +450,8 @@ class D435iCameraNode:
                 depth_m = depth_raw.astype(np.float32) * self.depth_scale
 
                 stamp = rospy.Time.now()
-                color_msg = self.bridge.cv2_to_imgmsg(color_image, encoding="bgr8")
-                depth_msg = self.bridge.cv2_to_imgmsg(depth_m, encoding="32FC1")
+                color_msg = self._make_img_msg(color_image, "bgr8")
+                depth_msg = self._make_img_msg(depth_m, "32FC1")
                 color_msg.header.stamp = stamp
                 depth_msg.header.stamp = stamp
                 color_msg.header.frame_id = self.frame_id
@@ -475,7 +492,18 @@ class D435iCameraNode:
             except Exception as exc:
                 if self.shutting_down or rospy.is_shutdown():
                     break
-                rospy.logerr_throttle(2.0, "Unexpected D435i error: %s", exc)
+                self.consecutive_timeouts += 1
+                rospy.logwarn(
+                    "RealSense frame processing error (%d/%d): %s",
+                    self.consecutive_timeouts,
+                    self.timeout_restart_count,
+                    exc,
+                )
+                if self.consecutive_timeouts >= self.timeout_restart_count and not rospy.is_shutdown():
+                    if self.try_next_profile("repeated frame processing errors"):
+                        self.restart_pipeline()
+                    else:
+                        self.restart_pipeline()
 
     def stop(self):
         self.shutting_down = True

@@ -111,6 +111,19 @@ class YoloDetectorNode:
             self.show_window,
         )
 
+    @staticmethod
+    def _make_img_msg(array, encoding):
+        if not array.flags["C_CONTIGUOUS"]:
+            array = np.ascontiguousarray(array)
+        msg = Image()
+        msg.height = array.shape[0]
+        msg.width = array.shape[1]
+        msg.encoding = encoding
+        msg.is_bigendian = False
+        msg.step = int(array.shape[1] * array.dtype.itemsize)
+        msg.data = array.tobytes()
+        return msg
+
     def depth_callback(self, msg):
         try:
             depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding="32FC1")
@@ -155,7 +168,7 @@ class YoloDetectorNode:
 
         self.result_pub.publish(result_msg)
         self.results_pub.publish(detections_msg)
-        annotated_msg = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
+        annotated_msg = self._make_img_msg(annotated, "bgr8")
         annotated_msg.header = msg.header
         self.annotated_pub.publish(annotated_msg)
 

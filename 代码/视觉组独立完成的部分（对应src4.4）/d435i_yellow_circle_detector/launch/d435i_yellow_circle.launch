@@ -1,5 +1,6 @@
 <launch>
   <arg name="show_window" default="false" />
+  <arg name="show_legacy_window" default="false" />
   <arg name="fps" default="30" />
   <arg name="display_scale" default="1.0" />
   <arg name="enable_record" default="false" />
@@ -109,7 +110,7 @@
     <param name="camera_to_body_yaw_deg" value="0.0" />
   </node>
 
-  <group if="$(arg show_window)">
+  <group if="$(arg show_legacy_window)">
     <node pkg="d435i_yellow_circle_detector"
           type="annotated_image_viewer_node.py"
           name="annotated_image_viewer_node"
