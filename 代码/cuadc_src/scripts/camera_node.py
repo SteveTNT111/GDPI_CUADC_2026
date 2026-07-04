@@ -7,7 +7,6 @@ import cv2
 import numpy as np
 import pyrealsense2 as rs
 import rospy
-from cv_bridge import CvBridge
 from sensor_msgs.msg import CameraInfo, Image
 
 
@@ -51,7 +50,6 @@ class CameraNode:
         self.align_depth_to_color = get_bool_param("~align_depth_to_color", True)
         self.frame_id = rospy.get_param("~frame_id", "d435i_color_optical_frame")
 
-        self.bridge = CvBridge()
         self.color_pub = rospy.Publisher("/vision/color/image_raw", Image, queue_size=1)
         self.depth_pub = rospy.Publisher("/vision/aligned_depth/image_raw", Image, queue_size=1)
         self.camera_info_pub = rospy.Publisher("/vision/color/camera_info", CameraInfo, queue_size=1)
@@ -180,6 +178,25 @@ class CameraNode:
         ci.P = [intr.fx, 0.0, intr.ppx, 0.0, 0.0, intr.fy, intr.ppy, 0.0, 0.0, 0.0, 1.0, 0.0]
         return ci
 
+    @staticmethod
+    def _make_img_msg(array, encoding):
+        """Construct a sensor_msgs/Image from a numpy array without cv_bridge.
+
+        cv_bridge on ROS Noetic + OpenCV 4.x has a bug where cvtype_to_name
+        is missing keys (e.g. CV_8UC3=16) that encoding_to_cvtype2 produces,
+        causing KeyError when encoding "bgr8" is used.
+        """
+        if not array.flags["C_CONTIGUOUS"]:
+            array = np.ascontiguousarray(array)
+        msg = Image()
+        msg.height = array.shape[0]
+        msg.width = array.shape[1]
+        msg.encoding = encoding
+        msg.is_bigendian = False
+        msg.step = int(array.shape[1] * array.dtype.itemsize)
+        msg.data = array.tobytes()
+        return msg
+
     def convert_to_bgr(self, color_frame):
         fp = color_frame.get_profile().as_video_stream_profile()
         w, h, fmt = int(fp.width()), int(fp.height()), fp.format()
@@ -266,8 +283,8 @@ class CameraNode:
                 depth_m = depth_raw.astype(np.float32) * self.depth_scale
 
                 stamp = rospy.Time.now()
-                color_msg = self.bridge.cv2_to_imgmsg(color_img, encoding="bgr8")
-                depth_msg = self.bridge.cv2_to_imgmsg(depth_m, encoding="32FC1")
+                color_msg = self._make_img_msg(color_img, "bgr8")
+                depth_msg = self._make_img_msg(depth_m, "32FC1")
                 color_msg.header.stamp = stamp
                 depth_msg.header.stamp = stamp
                 color_msg.header.frame_id = self.frame_id
@@ -300,7 +317,12 @@ class CameraNode:
             except Exception as exc:
                 if self.shutting_down or rospy.is_shutdown():
                     break
-                rospy.logerr_throttle(2.0, "Unexpected error: %s", exc)
+                self.consecutive_timeouts += 1
+                rospy.logwarn("Frame processing error (%d/%d): %s",
+                               self.consecutive_timeouts, self.timeout_restart_count, exc)
+                if self.consecutive_timeouts >= self.timeout_restart_count:
+                    self.try_next_profile("repeated errors")
+                    self.restart_pipeline()
 
     def stop(self):
         self.shutting_down = True
@@ -311,7 +333,10 @@ class CameraNode:
                 pass
             finally:
                 self.pipeline_started = False
-        cv2.destroyAllWindows()
+        try:
+            cv2.destroyAllWindows()
+        except Exception:
+            pass
 
 
 def main():
