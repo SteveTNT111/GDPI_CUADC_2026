@@ -245,6 +245,8 @@ class DetectorNode:
         # 第 5 步：发布
         self.result_pub.publish(result_msg)
         self.results_pub.publish(detections_msg)
+        # 强制连续化 —— OpenCV 画图操作可能破坏数组连续性，导致 cv_bridge 报 KeyError
+        annotated = np.ascontiguousarray(annotated)
         annotated_msg = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
         annotated_msg.header = msg.header
         self.annotated_pub.publish(annotated_msg)
