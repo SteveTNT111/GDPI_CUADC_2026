@@ -50,9 +50,22 @@ class YellowBinarizerNode:
             return
 
         binary_mask = self.make_binary_mask(image)
-        binary_msg = self.bridge.cv2_to_imgmsg(binary_mask, encoding="mono8")
+        binary_msg = self._make_img_msg(binary_mask, "mono8")
         binary_msg.header = msg.header
         self.binary_pub.publish(binary_msg)
+
+    @staticmethod
+    def _make_img_msg(array, encoding):
+        if not array.flags["C_CONTIGUOUS"]:
+            array = np.ascontiguousarray(array)
+        msg = Image()
+        msg.height = array.shape[0]
+        msg.width = array.shape[1]
+        msg.encoding = encoding
+        msg.is_bigendian = False
+        msg.step = int(array.shape[1] * array.dtype.itemsize)
+        msg.data = array.tobytes()
+        return msg
 
     def make_binary_mask(self, image):
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
