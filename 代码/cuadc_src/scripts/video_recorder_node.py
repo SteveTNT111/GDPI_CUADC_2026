@@ -27,6 +27,8 @@ class VideoRecorderNode:
         self.output_dir = os.path.expanduser(rospy.get_param("~output_dir", "~/cuadc_videos"))
         self.codec = rospy.get_param("~codec", "MJPG")
         self.file_prefix = rospy.get_param("~file_prefix", "cuadc_train")
+        self.show_window = rospy.get_param("~show_window", True)
+        self.window_name = rospy.get_param("~window_name", "CUADC Video Recorder (Ctrl+C to stop)")
 
         os.makedirs(self.output_dir, exist_ok=True)
 
@@ -58,6 +60,15 @@ class VideoRecorderNode:
             self.writer.write(frame)
             self.frame_count += 1
 
+        if self.show_window:
+            label = "REC {}  {}x{}  FPS {:.0f}".format(
+                self.frame_count, frame.shape[1], frame.shape[0], self.fps)
+            disp = frame.copy()
+            cv2.putText(disp, label, (8, 28), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6, (0, 0, 255), 2, cv2.LINE_AA)
+            cv2.imshow(self.window_name, disp)
+            cv2.waitKey(1)
+
     def start_recording(self, shape):
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = "{}_{}.avi".format(self.file_prefix, stamp)
@@ -77,6 +88,8 @@ class VideoRecorderNode:
         if self.writer is not None:
             self.writer.release()
             self.writer = None
+        if self.show_window:
+            cv2.destroyWindow(self.window_name)
         if self.video_path:
             rospy.loginfo("Recording stopped. frames=%d → %s", self.frame_count, self.video_path)
 

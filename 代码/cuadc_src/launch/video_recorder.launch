@@ -3,20 +3,33 @@
     video_recorder.launch — D435i 视频录制（用于 Roboflow RAPID 训练）
 
     启动即录，Ctrl+C 停止。输出 .avi 到 ~/cuadc_videos/
+    默认 1280×720 @ 30FPS，弹预览窗口
 
     运行方式：
       roslaunch cuadc_vision video_recorder.launch
-      roslaunch cuadc_vision video_recorder.launch fps:=15 output_dir:=/home/lab/my_videos
+      roslaunch cuadc_vision video_recorder.launch color_width:=640 color_height:=480  # 低分辨率省空间
+      roslaunch cuadc_vision video_recorder.launch show_window:=false                  # 关预览窗口
   -->
 
+  <!-- 分辨率与帧率 -->
+  <arg name="color_width" default="1280" />
+  <arg name="color_height" default="720" />
   <arg name="fps" default="30" />
-  <arg name="output_dir" default="$(env HOME)/cuadc_videos" />
 
-  <!-- D435i 相机 -->
+  <!-- 预览窗口 -->
+  <arg name="show_window" default="true" />
+
+  <!-- 输出 -->
+  <arg name="output_dir" default="$(env HOME)/cuadc_videos" />
+  <arg name="codec" default="MJPG" />
+
+  <!-- D435i 相机（高分辨率） -->
   <node pkg="cuadc_vision"
         type="camera_node.py"
         name="camera_node"
         output="screen">
+    <param name="color_width" value="$(arg color_width)" />
+    <param name="color_height" value="$(arg color_height)" />
     <param name="fps" value="$(arg fps)" />
   </node>
 
@@ -27,5 +40,7 @@
         output="screen">
     <param name="fps" value="$(arg fps)" />
     <param name="output_dir" value="$(arg output_dir)" />
+    <param name="codec" value="$(arg codec)" />
+    <param name="show_window" value="$(arg show_window)" />
   </node>
 </launch>
