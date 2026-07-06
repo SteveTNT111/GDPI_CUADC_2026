@@ -8,7 +8,7 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
 )
 
-add_message_files(FILES YoloDetection.msg YoloDetections.msg GeoTarget.msg)
+add_message_files(FILES YoloDetection.msg YoloDetections.msg GeoTarget.msg BucketInfo.msg)
 
 generate_messages(DEPENDENCIES std_msgs geometry_msgs)
 

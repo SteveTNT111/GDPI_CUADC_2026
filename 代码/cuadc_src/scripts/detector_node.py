@@ -33,7 +33,7 @@ import rospkg
 from cv_bridge import CvBridge
 from sensor_msgs.msg import CameraInfo, Image
 
-from cuadc_vision.msg import YoloDetection, YoloDetections
+from cuadc_vision.msg import YoloDetection, YoloDetections, BucketInfo
 
 
 def get_bool_param(name, default):
@@ -121,6 +121,9 @@ class DetectorNode:
         )
         self.annotated_pub = rospy.Publisher(
             "/vision/annotated_image", Image, queue_size=1
+        )
+        self.bucket_info_pub = rospy.Publisher(
+            "/vision/bucket/info", BucketInfo, queue_size=1
         )
 
         # ---------- 订阅 ----------
@@ -224,12 +227,9 @@ class DetectorNode:
                 (0, 255, 255), 2   # 黄色 BGR=(0,255,255)
             )
 
-        # 4b. 画画面中心的红色十字准心（标注相机光心位置）
+        # 4b. 画画面中心的坐标系（x/y 轴带箭头和字母）
         h, w = frame.shape[:2]
-        cx_c, cy_c = w // 2, h // 2
-        r = 7
-        cv2.line(annotated, (cx_c - r, cy_c), (cx_c + r, cy_c), (0, 0, 255), 1)
-        cv2.line(annotated, (cx_c, cy_c - r), (cx_c, cy_c + r), (cx_c, 0, 255), 1)
+        self.draw_center_axes(annotated, w // 2, h // 2)
 
         # 4c. 画最佳目标的详细标注（见 draw_overlay）
         if best is not None:
@@ -262,6 +262,19 @@ class DetectorNode:
         annotated_msg = self._make_img_msg(annotated, encoding="bgr8")
         annotated_msg.header = msg.header
         self.annotated_pub.publish(annotated_msg)
+
+        # 5b. 发布桶信息（数量 + 最佳目标的像素偏差）
+        binfo = BucketInfo()
+        binfo.header = msg.header
+        binfo.count = len(detections_msg.detections)
+        if best is not None:
+            h_img, w_img = frame.shape[:2]
+            binfo.delta_x = float(best.center_x - w_img // 2)
+            binfo.delta_y = float(best.center_y - h_img // 2)
+        else:
+            binfo.delta_x = 0.0
+            binfo.delta_y = 0.0
+        self.bucket_info_pub.publish(binfo)
 
         # 第 6 步：OpenCV 窗口
         if self.show_window:
@@ -514,19 +527,91 @@ class DetectorNode:
                 image, "z={:.2f}  d={:.2f}m".format(det.camera_z_m, det.distance_m),
                 bx, by + line_h * 2, font_scale=font_scale, text_color=text_color
             )
-            # 第 4 行：框中心 vs 画面中心的像素差（带方向箭头）
+            # 第 4 行：框中心 vs 画面中心的像素差（Δx, Δy）
             h_img, w_img = image.shape[:2]
             px_dx = det.center_x - w_img // 2
             px_dy = det.center_y - h_img // 2
-            self.draw_text_bg(
-                image, "px→{:+.0f}  py↑{:+.0f}".format(px_dx, px_dy),
+            self.draw_delta_label(
+                image, "x", px_dx,
                 bx, by + line_h * 3, font_scale=font_scale, text_color=text_color
+            )
+            self.draw_delta_label(
+                image, "y", px_dy,
+                bx + 90, by + line_h * 3, font_scale=font_scale, text_color=text_color
             )
         else:
             self.draw_text_bg(
                 image, "depth none",
                 bx, by + line_h, font_scale=font_scale, text_color=text_color
             )
+
+    def draw_center_axes(self, image, cx, cy, length=45):
+        """
+        在画面中心画一个小坐标系：
+          x 轴（红色）指向右方，末端有箭头和字母 "x"
+          y 轴（绿色）指向上方，末端有箭头和字母 "y"
+        像教科书上的坐标系一样。
+        """
+        # x 轴 — 红色，向右
+        end_x = cx + length
+        cv2.arrowedLine(image, (cx, cy), (end_x, cy), (0, 0, 255), 1,
+                        tipLength=0.25)
+        cv2.putText(image, "x", (end_x + 4, cy + 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 1, cv2.LINE_AA)
+
+        # y 轴 — 绿色，向上（图像坐标系 y 向下，所以箭头指向 cy - length）
+        end_y = cy - length
+        cv2.arrowedLine(image, (cx, cy), (cx, end_y), (0, 255, 0), 1,
+                        tipLength=0.25)
+        cv2.putText(image, "y", (cx + 5, end_y - 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 0), 1, cv2.LINE_AA)
+
+        # 原点小圆点
+        cv2.circle(image, (cx, cy), 2, (255, 255, 255), -1)
+
+    def draw_delta_label(self, image, letter, value, x, y,
+                         font_scale=0.45, text_color=(0, 255, 255)):
+        """
+        画 "Δ{letter} {value:+}" 样式的标签。
+        由于 OpenCV Hershey 字体不支持 Δ 字符，这里手绘一个小三角。
+        """
+        text = "{}{:+.0f}".format(letter, value)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        thickness = 2
+        (tw, th), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+
+        # 三角占位宽度
+        tri_w = 10
+        total_w = tri_w + 4 + tw + 4
+
+        h, w_img = image.shape[:2]
+        x0 = max(0, min(w_img - total_w, x))
+        y0 = max(th + 6, min(h - baseline - 4, y))
+
+        # 黑底
+        cv2.rectangle(
+            image,
+            (x0, y0 - th - 6),
+            (x0 + total_w, y0 + baseline + 4),
+            (0, 0, 0), -1
+        )
+
+        # 手绘 delta 三角（Δ）
+        tri_cx = x0 + 4 + tri_w // 2
+        tri_top = y0 - th // 2 - 2
+        tri_bot = y0 - th // 2 + 7
+        pts = np.array([
+            [tri_cx, tri_top],             # 顶点
+            [tri_cx - 4, tri_bot],         # 左下
+            [tri_cx + 4, tri_bot],         # 右下
+        ], np.int32)
+        cv2.fillPoly(image, [pts], text_color)
+
+        # 文字（字母 + 数值）
+        cv2.putText(
+            image, text, (x0 + tri_w + 4, y0), font, font_scale,
+            text_color, thickness, cv2.LINE_AA
+        )
 
     def draw_text_bg(self, image, text, x, y,
                      font_scale=0.55, text_color=(0, 255, 0), bg_color=(0, 0, 0)):
