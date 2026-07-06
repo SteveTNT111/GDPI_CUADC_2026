@@ -33,8 +33,10 @@ cuadc_src/
 │   └── params.yaml                            #   全局参数
 ├── msg/
 │   ├── GeoTarget.msg                          #   大地坐标目标
+│   ├── MissionStatus.msg                      #   任务状态（弹药/瞄准/抛投事件）
 │   ├── YoloDetection.msg                      #   单目标检测
-│   └── YoloDetections.msg                     #   全部检测
+│   ├── YoloDetections.msg                     #   全部检测
+│   └── BucketInfo.msg                         #   目标数量 + 像素偏差
 ├── models/
 ├── CMakeLists.txt
 └── package.xml
@@ -89,6 +91,558 @@ chmod +x ~/catkin_ws/src/cuadc_src/scripts/*.py
 
 ---
 
+## 坐标系统详解
+
+> 本项目涉及 **5 个坐标系**，从相机像素一路变换到全球经纬度。
+> 理解这些坐标系的定义和它们之间的变换关系，是读懂 `detector_node.py` 和 `geopose_node.py` 的前提。
+> 每个小节末尾附有 **gptimage 绘图提示**，复制到 ChatGPT/gptimage 即可生成辅助理解的示意图。
+
+### 坐标系全览
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                     坐标变换全链路                                 │
+│                                                                   │
+│  像素 (u,v)  ──→  相机光学系  ──→  机体 FRD  ──→  ENU  ──→  WGS84 │
+│   (2D 图像)      (3D 右手系)     (前右下)      (东北天)   (经纬高) │
+│                                                                   │
+│  detector_node   detector_node       TF树      四元数旋转  geographiclib│
+│   YOLO 输出      project_pixel    camera→body  body→ENU   ENU→WGS84   │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+| 序号 | 坐标系 | 英文 | 维度 | 原点 | 轴定义 | 谁来提供/计算 |
+|------|--------|------|------|------|--------|-------------|
+| ① | 像素系 | Pixel | 2D | 图像左上角 | u→右, v→下 | OpenCV / YOLO |
+| ② | 相机光学系 | Camera Optical | 3D | 相机光心 | X→右, Y→下, Z→前 | detector_node 反投影 |
+| ③ | 机体坐标系 | Body (FRD) | 3D | 无人机质心 | X→前, Y→右, Z→下 | TF 树变换 |
+| ④ | 东北天坐标系 | ENU | 3D | 起飞点 | E→东, N→北, U→上 | MAVROS + 四元数旋转 |
+| ⑤ | 大地坐标系 | WGS84 | 2D+1 | 地球椭球 | 纬度, 经度, 海拔 | RTK GPS + geographiclib |
+
+---
+
+### ① 像素坐标系 (Pixel Frame)
+
+> **范围：** 640×480 的 2D 图像 | **所在节点：** `detector_node.py`
+
+```
+(0,0) ────────────────────→ u (col, 向右)
+  │
+  │      · (cx,cy) 光心
+  │         ≈ (320, 240)
+  │
+  ↓
+  v (row, 向下)
+```
+
+- **原点 (0,0)**：图像左上角
+- **u 轴**：水平向右（列号增大），范围 0~639
+- **v 轴**：垂直向下（行号增大），范围 0~479
+- **光心 (cx, cy)**：相机光轴在图像上的投影点，约 (320, 240)
+
+> YOLO 检测输出的 `x_min, y_min, x_max, y_max` 和 `center_x, center_y` 都在此坐标系下。
+
+---
+
+### ② 相机光学坐标系 (Camera Optical Frame)
+
+> **范围：** 相机前方的 3D 空间（约 0.3~10m） | **所在节点：** `detector_node.py` → `project_pixel()`
+
+```
+         Z+ (光轴，从镜头指向场景 / 指向地面)
+        ↗
+       /
+      相 机 —————→ X+ (右)
+       |
+       ↓
+      Y+ (下)
+```
+
+**这是标准针孔相机模型 / OpenCV 光学坐标系：**
+
+| 轴 | 正方向 | 画面像素对应 | 定义来源 |
+|----|--------|------------|---------|
+| **X** | 右 | u 增大方向 | `X = (u - cx) × Z / fx` |
+| **Y** | 下 | v 增大方向 | `Y = (v - cy) × Z / fy` |
+| **Z** | 前（光轴指向场景） | 深度图数值 | `Z = depth` |
+
+**右手定则验证：** X(右) × Y(下) = Z(前) ✓
+
+**画面位置与坐标正负：**
+
+| 目标在画面中 | X 符号 | Y 符号 | 原因 |
+|-------------|--------|--------|------|
+| 右边 | **正 (+)** | — | u > cx |
+| 左边 | **负 (−)** | — | u < cx |
+| 下方 | — | **正 (+)** | v > cy |
+| 上方 | — | **负 (−)** | v < cy |
+| 正中心 | 0 | 0 | u=cx, v=cy |
+
+> **窗口画面上的坐标轴标记：** 红色箭 → 右 (X+)，绿色箭 ↓ 下 (Y+)。目标在箭头方向数值为正，反方向数值为负。
+
+<details>
+<summary><b>📐 gptimage 绘图提示 1：相机光学坐标系示意图</b></summary>
+
+```
+A 3D coordinate system diagram showing a camera with three colored axes:
+- Red axis pointing RIGHT (labeled "X+ Right / 右")
+- Green axis pointing DOWN (labeled "Y+ Down / 下")
+- Blue axis pointing FORWARD out of the lens (labeled "Z+ Forward / 前 / 光轴")
+- Camera body drawn as a simple box with lens visible on the front face
+- A small image plane shown behind the lens, with u-axis right and v-axis down matching X/Y directions
+- A target object (cylinder) shown in front of the camera at some offset from the optical axis
+- Dashed projection lines from target to image plane, showing pixel coordinates (u,v)
+- Label at top: "标准相机光学坐标系 (OpenCV Pinhole Camera Model)"
+- Right-hand rule annotation in corner: X × Y = Z
+- Style: clean technical 3D illustration, white background, Chinese + English labels
+```
+</details>
+
+---
+
+### ③ 机体坐标系 (Body Frame / FRD)
+
+> **框架名：** `base_link` | **TF 变换：** `d435i_color_optical_frame` → `base_link`（由外部 TF 树发布）
+> **所在节点：** `geopose_node.py` → `transform_camera_to_body()`
+
+#### 3.1 机体坐标系定义 (FRD)
+
+ArduPilot / PX4 使用 **FRD (Forward-Right-Down)** 机体坐标系：
+
+```
+         X_body (前)
+        ↗
+       /
+      无人机 —————→ Y_body (右)
+       |
+       ↓
+      Z_body (下)
+```
+
+| 轴 | 正方向 | 含义 |
+|----|--------|------|
+| **X_body** | 前方 | 无人机机头指向 |
+| **Y_body** | 右方 | 无人机右侧 |
+| **Z_body** | 下方 | 指向地面 |
+
+**右手定则验证：** X(前) × Y(右) = Z(下) ✓
+
+> **FRD vs NED：** FRD（前右下）是机体固连坐标系，随无人机旋转；NED（北东地）是固定在世界上的坐标系。当无人机机头朝北时，FRD 的 (前,右,下) 与 NED 的 (北,东,地) 完全对齐。
+
+#### 3.2 相机→机体的物理安装关系
+
+相机安装在机体**下方**，镜头朝下，相机外壳的物理"上方"朝向机体**前方**：
+
+```
+              无人机机体
+          ┌──────────────┐
+    前 ←  │    (机头)     │  → 后
+          │              │
+          │   ┌─────┐    │
+          │   │D435i│    │  ← 相机在机体下方
+          │   │ 相机 │    │     镜头 ↓ 朝地面
+          │   │     │    │
+          │   └─────┘    │
+          │     ↑        │
+          │  相机上方     │
+          │  朝向机头     │
+          └──────────────┘
+                ↓ 地面
+```
+
+**坐标轴对应关系（相机光学系 → 机体 FRD）：**
+
+| 相机光学轴 | 方向 | 映射到机体 | 推导 |
+|-----------|------|-----------|------|
+| X_cam (右) | → | **Y_body (右)** | 相机右侧 = 机体右侧 |
+| Y_cam (下) | ↓ | **−X_body (后)** | 相机光学"下" = 机体后方 |
+| Z_cam (光轴) | ↗ | **Z_body (下)** | 相机光轴指向地面 |
+
+**变换公式：**
+```
+X_body (前) = −Y_cam     ← 因为相机 −Y (物理上方) 朝向机体前方
+Y_body (右) =  X_cam     ← 相机右侧 = 机体右侧
+Z_body (下) =  Z_cam     ← 相机光轴 = 指向地面
+```
+
+**推导逻辑：**
+1. 相机光学 Y 的正方向是"下"（图像 v 增大方向）
+2. 相机的物理"上方" = 光学系的 **−Y** 方向
+3. 该"上方"朝向机体前方 → −Y_cam = +X_body → **X_body = −Y_cam**
+
+> ⚠️ 这个变换由 TF 树中的静态变换 `d435i_color_optical_frame → base_link` 实现，**不硬编码在代码中**。
+> 如果实际安装方向不同，需要更新 TF 静态变换参数，而不是改 detector_node 或 geopose_node。
+
+<details>
+<summary><b>📐 gptimage 绘图提示 2：相机→机体安装关系图</b></summary>
+
+```
+A side-view technical diagram showing a quadcopter drone with a D435i camera mounted underneath:
+
+- Drone drawn as a simple cross-frame body with 4 arms and motors/propellers
+- D435i camera drawn as a rectangular box attached to the bottom center of the drone
+- Camera lens facing DOWN toward ground
+- Camera "top" side (flat face of the camera body, labeled "相机物理上方") pointing toward drone FRONT
+
+On the camera, draw 3 colored optical axes:
+- Red arrow: X_cam → Right (labeled "X_cam 右")
+- Green arrow: Y_cam → Down (labeled "Y_cam 下 = 光学Y+")
+- Blue arrow: Z_cam → Forward toward ground (labeled "Z_cam 光轴")
+
+On the drone body, draw 3 colored body axes at the drone center:
+- Red arrow: X_body → Forward (labeled "X_body 前")
+- Green arrow: Y_body → Right, out of page (labeled "Y_body 右")
+- Blue arrow: Z_body → Down (labeled "Z_body 下")
+
+Draw mapping arrows/labels showing the correspondence:
+- "X_cam → Y_body (右)" connecting camera X to body Y
+- "Y_cam → −X_body (后)" connecting camera Y to opposite of body X
+- "Z_cam → Z_body (下)" connecting camera Z to body Z
+
+Ground plane shown at bottom with a target object (cylinder/bucket) for context
+Label at top: "D435i 安装朝向 — 相机光学系 → 机体 FRD"
+Style: clean mechanical side-view illustration, white background, colored axes, Chinese + English labels
+```
+</details>
+
+---
+
+### ④ ENU 坐标系（东北天 / Local Tangent Plane）
+
+> **数据来源：** MAVROS `/mavros/local_position/pose`
+> **所在节点：** `geopose_node.py` → `quaternion_rotate_vector()`
+
+#### 4.1 ENU 坐标系定义
+
+ENU (East-North-Up) 是以**起飞点**为原点的局部切平面坐标系：
+
+```
+         N (北)
+        ↗
+       /
+      起飞点 —————→ E (东)
+       |
+       ↓
+      U (上) ← 垂直地面向上
+```
+
+| 轴 | 正方向 | 含义 |
+|----|--------|------|
+| **E (East)** | 东 | 正东方向 |
+| **N (North)** | 北 | 正北方向 |
+| **U (Up)** | 上 | 垂直地面向上（与重力反向） |
+
+**右手定则验证：** E(东) × N(北) = U(上) ✓
+
+#### 4.2 MAVROS 如何提供 ENU 数据和无人机姿态
+
+MAVROS 从飞控获取 EKF（扩展卡尔曼滤波）的融合估计结果，发布两个关键话题：
+
+| 话题 | 类型 | 字段 | 用途 |
+|------|------|------|------|
+| `/mavros/local_position/pose` | PoseStamped | `pose.position` → 无人机在 ENU 下的 (east, north, up) 坐标 | 提供 ENU 位置基准 |
+| | | `pose.orientation` → 四元数 `(x,y,z,w)` | **机体 FRD → ENU 的旋转** |
+| `/mavros/global_position/global` | NavSatFix | `latitude, longitude, altitude` | 无人机当前的 WGS84 坐标 (RTK GPS) |
+
+> **关于四元数 `pose.orientation`：** 它表示从**机体 FRD** 到 **ENU** 的旋转。
+> 例如无人机水平放置、机头朝北时，FRD 的 X(前) 与 N(北) 对齐，四元数接近 `(0, 0, 0, 1)`（无旋转）。
+
+#### 4.3 机体→ENU 旋转变换（四元数旋转）
+
+```python
+# geopose_node.py 核心代码
+# 第 1 步：从 TF 获取目标在机体 FRD 下的坐标
+body_point = self.transform_camera_to_body(msg)          # camera → body
+bx, by, bz = body_point.point.x, body_point.point.y, body_point.point.z
+
+# 第 2 步：用无人机姿态四元数旋转 body → ENU
+east_m, north_m, up_m = quaternion_rotate_vector(
+    latest_local_pose.pose.orientation,   # 四元数：机体 FRD → ENU
+    (bx, by, bz)                          # 待旋转的机体坐标向量
+)
+```
+
+**数学含义：** `v_enu = q ⊗ v_body ⊗ q⁻¹`（四元数旋转公式）
+
+**直观对照（无人机水平、不同机头朝向下，机体轴在 ENU 中的方向）：**
+
+| 无人机机头朝向 | 机体 X(前) → ENU | 机体 Y(右) → ENU |
+|--------------|-----------------|-----------------|
+| 朝北 | N (北) | E (东) |
+| 朝东 | E (东) | S (南 = −N) |
+| 朝南 | S (南 = −N) | W (西 = −E) |
+| 朝西 | W (西 = −E) | N (北) |
+
+<details>
+<summary><b>📐 gptimage 绘图提示 3：机体 FRD → ENU 四元数旋转</b></summary>
+
+```
+A top-down 2D diagram illustrating how the drone body frame rotates within the ENU frame:
+
+Left half — ENU World Frame:
+- Origin at bottom-left marked "起飞点 (ENU Origin)"
+- East axis (E) drawn as horizontal arrow to the right, labeled "E (东)"
+- North axis (N) drawn as vertical arrow upward, labeled "N (北)"
+- Up axis (U) noted as "out of page ↑"
+- Label: "ENU 世界坐标系（固定在地球上）"
+
+Right half — Drone Body Frame:
+- A drone icon (top-down view, X-shaped quadcopter) drawn at some angle
+- Two colored body axes overlaid on the drone:
+  - Red arrow: X_body pointing forward from drone nose, labeled "X_body (前)"
+  - Green arrow: Y_body pointing right from drone, labeled "Y_body (右)"
+- The yaw angle between North and drone heading clearly marked with an arc, labeled "偏航角 (Yaw)"
+- A target cylinder drawn at some position relative to the drone
+- A vector arrow from drone center to target, labeled "目标机体偏移 (bx, by, bz)"
+
+Bottom section — The Rotation:
+- Formula box: "q ⊗ v_body ⊗ q⁻¹ = v_enu"
+- Two result vectors shown in ENU frame:
+  - "(east, north) = 四元数旋转后的 ENU 偏移"
+  - Arrow emphasizing this is what gets added to drone GPS position
+
+Label at top: "机体 FRD → ENU 旋转变换 (四元数)"
+Style: clean top-down 2D technical diagram, colored axes, Chinese + English labels
+```
+</details>
+
+---
+
+### ⑤ WGS84 大地坐标系
+
+> **数据来源：** RTK GPS 模块 → 飞控 → MAVROS `/mavros/global_position/global`
+> **所在节点：** `geopose_node.py` → `enu_offset_to_geodetic()`
+
+#### 5.1 WGS84 坐标系定义
+
+WGS84 (World Geodetic System 1984) 是 GPS 使用的全球大地坐标系：
+
+```
+                      北极 (90°N)
+                         |
+            (-) 西经 ← — + — → (+) 东经
+                         |
+                      赤道 (0°)
+                         |
+                      南极 (90°S)
+```
+
+| 分量 | 符号 | 单位 | 范围 | 说明 |
+|------|------|------|------|------|
+| **纬度 (Latitude)** | φ / lat | 度 (°) | −90° ~ +90° | 赤道面与法线的夹角 |
+| **经度 (Longitude)** | λ / lon | 度 (°) | −180° ~ +180° | 本初子午面与当地子午面的夹角 |
+| **海拔 (Altitude)** | h / alt | 米 (m) | 任意 | 沿椭球法线到 WGS84 参考椭球面的距离 |
+
+> ⚠️ **GPS 海拔 ≠ 气压计高度。** GPS 海拔是相对于 WGS84 椭球面（数学曲面），不是海平面也不是地面。
+
+#### 5.2 RTK GPS 精度
+
+| GPS 模式 | 水平精度 | 垂直精度 | 本项目使用 |
+|----------|---------|---------|-----------|
+| 普通 GNSS | 2~5m | 5~10m | — |
+| RTK Float | 20~50cm | 50cm~1m | 过渡状态 |
+| **RTK Fixed** | **1~3cm** | **2~5cm** | ✅ 比赛用 |
+
+> 比赛要求使用 RTK Fixed 模式。RTK 通过地面基站发送差分改正数给无人机上的 RTK 接收机（流动站）来实现厘米级定位。
+
+#### 5.3 ENU → WGS84 变换 (Vincenty 正算)
+
+```python
+# geopose_node.py 核心代码
+# 以无人机当前 GPS 坐标为参考原点
+origin_lat = latest_global.latitude
+origin_lon = latest_global.longitude
+origin_alt = latest_global.altitude
+
+# 第 1 步：ENU 偏移 → 水平距离 + 方位角
+horizontal_m = sqrt(east_m² + north_m²)      # 水平距离 (m)
+azimuth_deg = atan2(east_m, north_m)          # 方位角 (度，从北顺时针)
+
+# 第 2 步：Vincenty 正算 → WGS84 经纬度
+result = Geodesic.WGS84.Direct(
+    origin_lat, origin_lon, azimuth_deg, horizontal_m
+)
+target_lat = result["lat2"]        # 目标纬度
+target_lon = result["lon2"]        # 目标经度
+target_alt = origin_alt + up_m     # 目标海拔 = 无人机海拔 + 高度差
+```
+
+**计算流程可视化：**
+```
+  ENU (east, north)                      大地坐标
+       │                                     │
+       ├─→ horizontal_m = √(e²+n²)           │
+       ├─→ azimuth = atan2(east, north)      │
+       │                                     ↓
+       └─→ Geodesic.WGS84.Direct ──→ (lat, lon)
+                                         alt = origin_alt + up
+```
+
+> `geographiclib` 使用 Vincenty 算法在 WGS84 椭球面上进行高精度大地线正算（给定起点、方位角、距离 → 终点经纬度），精度可达 0.1mm。
+
+<details>
+<summary><b>📐 gptimage 绘图提示 4：ENU 局部坐标 → WGS84 大地坐标</b></summary>
+
+```
+A diagram showing the transition from local ENU plane to global WGS84 coordinates:
+
+Left side — Local ENU Plane:
+- A flat square plane representing the local tangent plane
+- Origin point at center marked "起飞点 (ENU Origin = drone's GPS)"
+- Drone icon shown at some position on this plane
+- Target cylinder shown at a different position
+- Vector from drone to target labeled "ENU 偏移 (east_m, north_m, up_m)"
+- East and North axes drawn on the plane
+
+Right side — WGS84 Globe:
+- A curved cross-section of the Earth showing the WGS84 ellipsoid
+- Drone position marked on the surface with GPS coordinates visible
+- A curved geodesic line from drone position to target position
+- The geodesic labeled "Vincenty Direct (大地线正算)"
+- Target position marked with its own GPS coordinates
+- Annotation showing: azimuth angle from north, horizontal distance along geodesic
+
+Middle — Transformation Box:
+- "atan2(east, north) → azimuth"
+- "√(east²+north²) → distance"
+- "Geodesic.WGS84.Direct(lat, lon, azimuth, distance) → (lat_target, lon_target)"
+- "alt_target = alt_drone + up"
+
+Label at top: "ENU 局部坐标 → WGS84 大地坐标 (geographiclib Vincenty 正算)"
+Style: clean split diagram with flat plane + curved Earth, labeled formulas
+```
+</details>
+
+---
+
+### 完整变换链路：从像素到经纬度
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                      完整坐标变换链路                                   │
+│                                                                       │
+│  Step 1           Step 2           Step 3          Step 4    Step 5   │
+│  detector_node    TF 查询          geopose_node    geopose_node       │
+│                                                                       │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐ ┌─────┐│
+│  │ 像素系    │    │ 相机光学系 │    │ 机体 FRD  │    │ ENU 坐标系│ │WGS84││
+│  │ (u,v)    │───→│ X,Y,Z    │───→│ X,Y,Z    │───→│ E,N,U    │─→│经纬││
+│  │ 2D 图像   │    │ 3D 右手系  │    │ 前右下     │    │ 东北天     │ │度高││
+│  └──────────┘    └──────────┘    └──────────┘    └──────────┘ └─────┘│
+│       ↑               ↑               ↑               ↑         ↑     │
+│   针孔反投影       TF 静态变换      四元数旋转      Vincenty正算  RTK  │
+│   X=(u-cx)Z/fx   camera→body     body→ENU       ENU→WGS84     GPS   │
+│   Y=(v-cy)Z/fy                                                        │
+│   Z=depth                                                             │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+#### 每一步的输入/输出/实现
+
+| 步骤 | 变换 | 输入 | 输出 | 实现位置 | 关键依赖 |
+|------|------|------|------|---------|---------|
+| 1 | 像素 → 相机 | (u,v,depth) | (X_cam, Y_cam, Z_cam) | `detector_node.py:project_pixel()` | 相机内参 fx,fy,cx,cy |
+| 2 | 相机 → 机体 | (X_cam, Y_cam, Z_cam) | (X_body, Y_body, Z_body) | `geopose_node.py:transform_camera_to_body()` | TF 树 camera→body |
+| 3 | 机体 → ENU | (X_body, Y_body, Z_body) | (E, N, U) | `geopose_node.py:quaternion_rotate_vector()` | MAVROS 四元数 |
+| 4 | ENU → WGS84 | (E, N, U) + 无人机 GPS | (lat, lon, alt) | `geopose_node.py:enu_offset_to_geodetic()` | MAVROS GPS + geographiclib |
+
+#### GeoTarget 消息承载所有中间结果
+
+`geopose_node` 输出的 `GeoTarget` 消息包含了变换链上**每一步**的坐标值，方便调试：
+
+```
+camera_x_m, camera_y_m, camera_z_m    # Step 1 输出：相机光学系
+body_x_m, body_y_m, body_z_m          # Step 2 输出：机体 FRD
+enu_east_m, enu_north_m, enu_up_m     # Step 3 输出：ENU 偏移
+latitude, longitude, altitude          # Step 4 输出：WGS84 大地坐标
+```
+
+#### 数据源汇总
+
+| 数据 | 来源 | 话题 | 提供节点 |
+|------|------|------|---------|
+| 彩色图像 | D435i RGB 相机 | `/vision/color/image_raw` | `camera_node` |
+| 深度图 | D435i Stereo IR | `/vision/aligned_depth/image_raw` | `camera_node` |
+| 相机内参 | D435i 标定 | `/vision/color/camera_info` | `camera_node` |
+| 无人机 GPS (RTK) | MAVROS | `/mavros/global_position/global` | 外部 (飞控) |
+| 无人机 ENU 位姿 | MAVROS (EKF2) | `/mavros/local_position/pose` | 外部 (飞控) |
+| 相机→机体 TF | TF 静态变换 | `d435i_color_optical_frame→base_link` | 外部 (TF 树) |
+| YOLO 检测结果 | YOLOv8 推理 | `/vision/yolo/detection` | `detector_node` |
+| 大地坐标目标 | 全链路输出 | `/vision/target_global` | `geopose_node` |
+
+<details>
+<summary><b>📐 gptimage 绘图提示 5：完整变换链路全景图</b></summary>
+
+```
+A comprehensive horizontal pipeline diagram showing the full coordinate transformation chain:
+
+Layout: 5 connected stages in a horizontal row, with data flowing left to right
+
+Stage 1 [PIXEL — 像素系]:
+- Icon: camera image frame with pixel grid overlay
+- Shows: (u,v) coordinates, bounding box drawn around a detected cylinder
+- Arrow pointing to next stage labeled "project_pixel()"
+
+Stage 2 [CAMERA — 相机光学系]:
+- Icon: camera body with colored 3D axes (X red→right, Y green→down, Z blue→forward)
+- Formula box: "X=(u-cx)·Z/fx, Y=(v-cy)·Z/fy, Z=depth"
+- Output box: "(X_cam, Y_cam, Z_cam)"
+- Arrow pointing to next stage labeled "TF: camera→body"
+
+Stage 3 [BODY — 机体 FRD]:
+- Icon: top-down drone silhouette with body axes (X red→forward, Y green→right, Z blue→down)
+- Transform box: "X_body=−Y_cam, Y_body=X_cam, Z_body=Z_cam"
+- Output box: "(X_body, Y_body, Z_body)"
+- Arrow pointing to next stage labeled "Quaternion Rotate"
+
+Stage 4 [ENU — 东北天]:
+- Icon: compass rose showing East and North
+- Transform box: "v_enu = q ⊗ v_body ⊗ q⁻¹"
+- Output box: "(east, north, up)"
+- Arrow pointing to next stage labeled "Vincenty Direct"
+
+Stage 5 [WGS84 — 大地坐标]:
+- Icon: small globe or Earth sphere with lat/lon grid
+- Transform box: "Geodesic.WGS84.Direct(...)"
+- Output box: "(latitude, longitude, altitude)"
+- Target marker on globe surface
+
+Below the pipeline, a data source row showing:
+- "D435i" → camera intrinsics + depth
+- "飞控 EKF2" → attitude quaternion + GPS (via MAVROS)
+- "TF 树" → camera→body static transform
+- "RTK GPS" → centimeter-accurate global position
+
+Color scheme: each stage uses a distinct accent color:
+- Stage 1: gray (image)
+- Stage 2: orange (camera)
+- Stage 3: blue (body)
+- Stage 4: green (ENU)
+- Stage 5: purple (WGS84)
+
+Label at top: "坐标变换全链路：像素 → 相机光学 → 机体 FRD → ENU → WGS84"
+Subtitle: "detector_node ──→ geopose_node"
+Style: clean horizontal pipeline, professional technical diagram, Chinese + English labels
+```
+</details>
+
+---
+
+### 坐标系快速对照表
+
+| 问题 | 答案 |
+|------|------|
+| 相机光学系的 Y+ 是哪个方向？ | **下**（OpenCV 图像 v 增大方向） |
+| 相机光学系与机体 FRD 的关系？ | X_cam→Y_body(右), Y_cam→−X_body(后), Z_cam→Z_body(下) |
+| ENU 的 U 是什么方向？ | **Up (上)**，垂直地面向上 |
+| ENU 的原点在哪里？ | **起飞点**（MAVROS 的 local origin / EKF2 原点） |
+| 四元数旋转做了什么？ | 把机体 FRD 下的目标偏移向量转到 ENU 坐标系 |
+| RTK 提供什么精度的位置？ | RTK Fixed 模式水平 1~3cm，垂直 2~5cm |
+| NED 和 FRD 的区别？ | NED 固定在地球上（北东地），FRD 固定在机身上（前右下），两者经偏航旋转后对齐 |
+| 如果相机安装方向变了，改哪里？ | 修改 TF 树中 `d435i_color_optical_frame → base_link` 的静态变换 |
+
+---
+
 ## 节点详解
 
 > 每个节点都配好了 launch 文件，直接用 `roslaunch` 一行命令启动，不需要手动 `rosrun`。
@@ -99,13 +653,37 @@ chmod +x ~/catkin_ws/src/cuadc_src/scripts/*.py
 
 **启动文件：** `run_main.launch`
 
-**功能：** 通过 MAVROS 控制无人机完成全自动飞行流程。内部是一个状态机，依次执行：等待连接 → 检查 EKF/GPS → 切换 GUIDED 模式 → 解锁 → 起飞 → 悬停待命 → 执行任务 → 着陆/返航。
+**功能：** 通过 MAVROS 控制无人机完成全自动飞行流程。内部是一个状态机，依次执行：等待连接 → 检查 EKF/GPS → 切换 GUIDED 模式 → 解锁 → 起飞 → 悬停待命 → 执行任务（自动瞄准 + 自动抛投）→ 着陆/返航。集成了舵机控制功能和弹药管理。支持 `ground_test:=true` 地面测试模式，跳过 EKF 和起飞，解锁后直接进入 MISSION 状态。
+
+**MISSION 状态自动任务：**
+1. **自动切 GUIDED**：检测到目标数量 > 0 且当前非 GUIDED 模式 → 自动切换到 GUIDED
+2. **自动抛投**：相机系 XY 偏移均 < 10cm → 开始 3 秒稳定计时 → 稳定后触发抛投 → 5 秒冷却
+
+**发布话题：**
+
+| 话题 | 类型 | 说明 |
+|------|------|------|
+| `/vision/mission_status` | MissionStatus | 弹药数量 + 瞄准状态 + 抛投事件 |
+
+#### `/vision/mission_status` 消息详解 (MissionStatus)
+
+此消息由 main.py 以 10Hz 发布，detector_node 订阅后用于画面显示。
+
+| 字段 | 类型 | 含义 |
+|------|------|------|
+| `ammo_a` | uint8 | 前抛投器 (A) 剩余弹药数，0=无/未挂载 |
+| `ammo_b` | uint8 | 后抛投器 (B) 剩余弹药数，0=无/未挂载 |
+| `aiming` | bool | 飞控处于 GUIDED 模式且正在执行对准任务 |
+| `last_drop` | string | 最近一次抛投的抛投器编号，"A"/"B"/"" |
+
+> **实现原理：** main.py 在状态机主循环中每 10Hz 调用 `_publish_status()`，将当前弹药、瞄准状态和抛投事件打包发送。detector_node 收到 `last_drop` 非空时触发 3 秒的 "A DROP!!!" 显示。main.py 在 3 秒后自动将 `last_drop` 清空。
 
 **测试什么：** 验证飞控与机载电脑的 MAVROS 通信是否正常，验证 GUIDED 模式下起飞→悬停→着陆的完整链路。
 
 **启动后你可以：**
 - 手动模式（默认）：启动后终端会打印当前状态，用遥控器或 QGC 手动解锁起飞，main.py 会跟随状态变化
 - 自动模式：加 `auto_arm:=true auto_takeoff:=true`，启动后无人机会自动完成解锁→起飞→悬停，无需遥控器干预
+- **地面测试模式**：加 `ground_test:=true`，跳过 EKF 检查 + 跳过 GUIDED 切换和起飞，解锁后直接进入 MISSION 状态。适用于室内手持飞机对准圆筒测试自动抛投逻辑（见下方"室内地面测试流程"）
 
 **启动命令：**
 
@@ -114,30 +692,128 @@ chmod +x ~/catkin_ws/src/cuadc_src/scripts/*.py
 roslaunch cuadc_vision run_main.launch
 # 等价于 auto_arm:=false auto_takeoff:=false
 # 启动后什么都不会自动发生，需要你用遥控器操作
-# 终端会打印：等待飞控连接... → 飞控已连接 → 等待 EKF 收敛... → 等待手动解锁...
-```
 
-```bash
 # ② 自动起飞——比赛用
 roslaunch cuadc_vision run_main.launch auto_arm:=true auto_takeoff:=true
-# 启动后自动切 GUIDED → 解锁 → 起飞到默认 10m → 悬停
-# 终端会打印每一步的进度
-```
 
-```bash
-# ③ 自动起飞 + 指定高度
-roslaunch cuadc_vision run_main.launch auto_arm:=true auto_takeoff:=true takeoff_altitude:=15.0
+# ③ 自动起飞 + 指定高度 + 自定义弹药
+roslaunch cuadc_vision run_main.launch \
+  auto_arm:=true auto_takeoff:=true takeoff_altitude:=15.0 \
+  ammo_a:=2 ammo_b:=0
+
+# ④ 地面测试模式（室内手持测试，不飞行）
+roslaunch cuadc_vision run_main.launch ground_test:=true
+# 或者只用 rosrun 启动 main.py 单独测试：
+rosrun cuadc_vision main.py _ground_test:=true
 ```
 
 **依赖：** 必须先启动 MAVROS（`roslaunch mavros apm.launch`），飞控已连接且 GPS 有 fix。
 
-**验证是否正常：** 终端应依次打印 `飞控已连接 → EKF 就绪 → 解锁成功 → 起飞指令已发送 → 到达目标高度`。如果反复打印 `等待飞控连接...`，说明 MAVROS 没启动或飞控没插好。
+**验证是否正常：** 终端应依次打印 `飞控已连接 → EKF 就绪 → 解锁成功 → 起飞指令已发送 → 到达目标高度`。MISSION 状态下检测到目标后终端打印 `检测到 N 个目标 → 自动切换 GUIDED 模式`。
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `takeoff_altitude` | 10.0 | 起飞目标高度 (m) |
 | `auto_arm` | false | true = 启动后自动解锁 |
 | `auto_takeoff` | false | true = 解锁后自动起飞 |
+| `ground_test` | false | true = 地面测试模式（跳过 EKF + 跳过起飞，解锁后直接进入 MISSION） |
+| `enable_auto_guided` | true | 检测到目标时自动切 GUIDED |
+| `enable_auto_drop` | true | 对准后自动抛投 |
+| `drop_align_threshold_m` | 0.10 | 对准 XY 阈值 (m)，即 10cm |
+| `drop_stable_time_s` | 3.0 | 稳定对准计时 (s) |
+| `drop_cooldown_s` | 5.0 | 两次抛投冷却间隔 (s) |
+| `ammo_a` | 1 | 前抛投器 (A) 初始弹药数 |
+| `ammo_b` | 0 | 后抛投器 (B) 初始弹药数 (0=未挂载) |
+| `enable_ch5` | true | 启用 SERVO5 舵机通道 |
+| `enable_ch6` | false | 启用 SERVO6 舵机通道 |
+| `pwm_open` | 2000 | 抛投器打开 PWM (μs) |
+| `pwm_close` | 1000 | 抛投器关闭 PWM (μs) |
+| `servo_hold_s` | 0.8 | 打开后保持时间 (s) |
+
+#### 室内地面测试流程（ground_test 模式）
+
+> 适用于室内无 GPS 环境下，手持飞机对准圆筒测试自动抛投逻辑。不需要飞行。
+
+**状态机路径（地面测试模式）：**
+
+```
+INIT → PREARM → 跳过 EKF → 等待手动解锁 → ARMED → 直接进入 MISSION
+                                                              │
+                                              ┌───────────────┘
+                                              ▼
+                                    _check_auto_guided()  ← 检测到目标 → 切 GUIDED（室内可能失败，不影响抛投）
+                                    _check_auto_drop()    ← 对准稳定 3s → 触发舵机抛投
+```
+
+**操作步骤：**
+
+```bash
+# 1. 启动 MAVROS（终端 1）
+roslaunch mavros apm.launch fcu_url:=/dev/ttyACM0:921600
+
+# 2. 启动 main.py 地面测试模式（终端 2）
+rosrun cuadc_vision main.py _ground_test:=true
+
+# 3. 启动相机 + 检测（终端 3）
+roslaunch cuadc_vision detector_node.launch show_window:=true
+```
+
+**4. 操作飞控：**
+- 按飞控上的安全开关（safety switch），灯变为常亮
+- 遥控器解锁（STABILIZE 或 ALTHOLD 模式即可，无需 GPS）
+- 终端打印 `地面测试模式：解锁后直接进入 MISSION 状态`
+
+**5. 测试自动抛投：**
+- 手拿起飞机，将 D435i 相机对准圆筒
+- 观察 detector_node 窗口：目标出现黄色框，左下角 `detected: 1`
+- 观察 main.py 终端：
+  ```
+  检测到 1 个目标 → 自动切换 GUIDED 模式
+  目标已对准 | x=0.023 y=-0.015 (< 10cm) | 开始 3.0s 稳定计时...
+  稳定对准 3.0s | x=0.023 y=-0.015 | 触发抛投！
+  舵机 CH5 → 打开 (PWM=2000)
+  舵机 CH5 → 关闭 (PWM=1000)
+  抛投完成！A 抛投器 | 剩余 A=0 B=0 | 冷却 5.0s
+  ```
+
+> **注意：**
+> - 室内无 GPS，GUIDED 模式切换大概率失败（终端会打印 `飞行模式切换失败`），这是正常现象，**自动抛投不依赖 GUIDED 模式**
+> - 地面测试时 `enable_auto_guided` 可以设为 false 跳过 GUIDED 切换尝试：`_ground_test:=true _enable_auto_guided:=false`
+> - 舵机动作需要飞控已解锁 + 安全开关已解除，否则 MAVLink 舵机指令可能被飞控忽略
+> - 测试完毕后 `Ctrl+C` 退出，遥控器上锁
+
+---
+
+#### 已知 Bug 与修复记录
+
+##### Bug #1: `_wait_for_ekf()` 崩溃 — AttributeError: 'Pose' object has no attribute 'covariance'
+
+**发现时间：** 2026-07-06
+
+**现象：** main.py 启动后，在 PREARM 状态调用 `_wait_for_ekf()` 时崩溃：
+```
+AttributeError: 'Pose' object has no attribute 'covariance'
+```
+
+**原因：** `/mavros/local_position/pose` 话题类型是 `geometry_msgs/PoseStamped`，其 `pose` 字段是 `geometry_msgs/Pose` 类型（只含 `position` 和 `orientation`），**没有 `covariance` 字段**。原代码 `pose.pose.covariance[0]` 试图访问不存在的属性。
+
+协方差字段只存在于 `geometry_msgs/PoseWithCovariance` 类型中，而 MAVROS 的 `/mavros/local_position/pose` 发布的是不含协方差的 `PoseStamped`。
+
+**修复：** 将 EKF 检查逻辑从"读协方差矩阵"改为"检查位置数值是否已更新（非全零）"。修改后的代码在 `main.py:_wait_for_ekf()`：
+
+```python
+# 修复前（错误）：
+cov = pose.pose.covariance      # Pose 没有 covariance 属性！
+if cov[0] > 0.0: ...
+
+# 修复后（正确）：
+pos = self.current_pose.pose.position
+has_pose = abs(pos.x) > 0.001 or abs(pos.y) > 0.001 or abs(pos.z) > 0.001
+if has_pose and self.current_state.connected:
+    return True  # EKF 就绪
+```
+
+同时添加了 `ground_test` 参数支持室内无 GPS 场景（见上方"室内地面测试流程"）。
 
 ---
 
@@ -368,50 +1044,94 @@ rostopic hz /vision/color/image_raw   # 应该有稳定 30Hz 输出
 
 **启动文件：** `detector_node.launch`
 
-**功能：** 一键启动 D435i 相机 + YOLO 检测。可选弹出 OpenCV 窗口显示实时标注画面，加载 YOLOv8 模型逐帧推理，发布检测结果。
+**功能：** 一键启动 D435i 相机 + YOLO 检测。支持**自动启动 roscore / MAVROS**（如未运行），读取飞控数据并在画面左下角面板显示。加载 YOLOv8 模型逐帧推理，发布检测结果和飞控数据。
 
-**测试什么：** 验证模型能否正确识别圆筒、置信度是否够高、检测帧率是否满足实时要求。
+**测试什么：** 验证模型能否正确识别圆筒、置信度是否够高、检测帧率是否满足实时要求。验证 MAVROS 连接和数据读取是否正常。
 
 **启动后你可以：**
-- 加 `show_window:=true` 时弹出 `YOLO Detection` 窗口，实时看到检测框和距离标注
+- 加 `show_window:=true` 时弹出 `YOLO Detection` 窗口，实时看到检测框、距离标注和**飞控状态面板**
 - 用 `rostopic echo /vision/yolo/detection` 查看检测数据
+- 用 `rostopic echo /vision/bucket/info` 查看目标数量和像素偏差
 - 拿着圆筒在相机前移动，观察检测框是否跟随
+- 直接 `python3 detector_node.py` 启动（不依赖 roslaunch），脚本会自动拉起 roscore 和 MAVROS
+
+**自动启动（auto-start）机制：**
+
+脚本启动时自动检测运行环境：
+1. **检测 roscore**：通过 XML-RPC 探测 ROS master。如果未运行，自动 `roscore &` 并等待就绪（30s 超时）
+2. **检测 MAVROS**：通过检查 `/mavros/state` 话题是否存在。如果未运行，自动 `roslaunch mavros apm.launch &` 并等待就绪（30s 超时）
+3. 两项自动启动均可通过参数关闭：`auto_start_mavros:=false`
+
+> 自动启动仅在地面调试时方便使用。比赛飞行时应使用 `run_main.launch` 统一管理所有节点的启动。
 
 **启动命令：**
 
-**① 首次测试——CPU 推理（无窗口）：**
+**① 首次测试——CPU 推理（无窗口、自动启动 MAVROS）：**
 
 ```bash
 roslaunch cuadc_vision detector_node.launch
+# 如果 roscore 未运行，脚本会自动启动它
+# 如果 MAVROS 未运行，脚本会自动启动它（等待 30s 超时后跳过）
 ```
 
-**② 地面调试——带画面窗口：**
+**② 地面调试——带画面窗口 + MAVROS 数据：**
 
 ```bash
 roslaunch cuadc_vision detector_node.launch show_window:=true
+# 窗口左下角显示飞控连接状态、电压、卫星数、RTK GPS 坐标
 ```
 
-**③ GPU 推理 + 提高阈值：**
+**③ 关闭自动启动 MAVROS（MAVROS 已在其他终端运行）：**
+
+```bash
+roslaunch cuadc_vision detector_node.launch auto_start_mavros:=false
+```
+
+**④ 直接 Python 启动（无 roslaunch，全自动）：**
+
+```bash
+python3 ~/catkin_ws/src/cuadc_src/scripts/detector_node.py
+# 自动拉起 roscore → 自动拉起 MAVROS → 启动检测
+# 这是最快的地面测试方式
+```
+
+**⑤ GPU 推理 + 提高阈值：**
 
 ```bash
 roslaunch cuadc_vision detector_node.launch yolo_device:=cuda:0 yolo_conf_threshold:=0.7
 ```
 
-**④ 自定义模型：**
+**⑥ 自定义模型 + 指定飞控串口：**
 
 ```bash
-roslaunch cuadc_vision detector_node.launch yolo_model_path:=/home/lab/my_model.pt
+roslaunch cuadc_vision detector_node.launch \
+  yolo_model_path:=/home/lab/my_model.pt \
+  mavros_fcu_url:=/dev/ttyUSB0:921600
 ```
 
 **发布话题：**
 
 | 话题 | 类型 | 说明 |
 |------|------|------|
-| `/vision/yolo/detection` | YoloDetection | 当前帧最佳目标 |
-| `/vision/yolo/detections` | YoloDetections | 当前帧全部目标 |
-| `/vision/annotated_image` | sensor_msgs/Image | 标注画面 |
+| `/vision/yolo/detection` | YoloDetection | 当前帧最高置信度目标 |
+| `/vision/yolo/detections` | YoloDetections | 当前帧全部通过过滤的目标 |
+| `/vision/bucket/info` | BucketInfo | 目标数量 + 最佳目标的像素偏差 |
+| `/vision/annotated_image` | sensor_msgs/Image | 标注画面（含检测框 + 飞控面板） |
 
-**验证是否正常：** 终端打印 `Detector started. model=...`，拿着圆筒在镜头前目标框跟随移动；如果加了 `show_window:=true`，窗口应正常弹出且画面流畅。
+#### `/vision/bucket/info` 消息详解 (BucketInfo)
+
+| 字段 | 类型 | 含义 |
+|------|------|------|
+| `header` | Header | 时间戳和 frame_id |
+| `count` | int32 | **当前帧识别到的目标物体数量**（通过类别过滤后的） |
+| `delta_x` | float32 | 最佳目标中心与画面光心的**水平像素偏差** (px)，正值=目标在光心右侧 |
+| `delta_y` | float32 | 最佳目标中心与画面光心的**垂直像素偏差** (px)，正值=目标在光心下方 |
+
+> **count vs detected：** `count` 替代了 `YoloDetection.detected` 的"是/否"二元判断，直接给出检测到的目标数量：`count=0` 表示无目标，`count>0` 表示有目标且数量明确。
+>
+> **delta_x / delta_y 的用途：** 供 `auto_drop_node` 判断目标是否在画面中心附近（对准即投）。正值和负值的含义与相机光学坐标系的 X(右+)、Y(下+) 一致。
+
+**验证是否正常：** 终端打印 `Detector started. model=...`，拿着圆筒在镜头前目标框跟随移动；如果加了 `show_window:=true`，窗口应正常弹出且画面流畅。飞控连接后终端打印 `FC data available: ...`，面板显示飞控数据。
 
 **FPS 基准测试（NUC i7-1265U，CPU 推理，imgsz=640）：**
 
@@ -432,28 +1152,127 @@ roslaunch cuadc_vision detector_node.launch show_window:=true
 
 预测框上方会显示一行格式如下的文字：
 ```
-cylinder 0.85 x→0.12 y↑-0.05 z=2.30 d=2.31m
+cylinder 0.85 x→0.12 y↓0.30 z=2.30 d=2.31m
 ```
 
 | 字段 | 含义 | 坐标系 |
 |------|------|--------|
 | `cylinder` | YOLO 模型输出的类别名 | — |
 | `0.85` | 置信度 | — |
-| `x→` | 目标相对相机光心水平偏移（正值=右方） | 相机光学系 |
-| `y↑` | 目标相对相机光心垂直偏移（正值=上方） | 相机光学系 |
-| `z` | 沿光轴方向的深度距离（相机正前方） | 相机光学系 |
+| `x→` | 目标相对相机光心水平偏移（正值=右方，X+） | 相机光学系 |
+| `y↓` | 目标相对相机光心垂直偏移（正值=下方，Y+） | 相机光学系 |
+| `z` | 沿光轴方向的深度距离（相机正前方，Z+） | 相机光学系 |
 | `d` | 相机到目标的直线距离 `sqrt(x²+y²+z²)` | — |
 
 > **z 和 d 的区别：** 目标在画面正中心时 `z = d`。目标偏离中心时 `d > z`，因为斜着量过去比直着量的深度更长。简单说：`z` 是踩在脚下的深度，`d` 是斜线拉过去的那根线长度。
 >
-> 画面正中心有固定红色十字准心（`+`），标注相机光心指向位置。
+> 画面正中心有一个标准相机光学坐标系标记：红色 x 轴 → 右 (X+)，绿色 y 轴 ↓ 下 (Y+)。
 
-**画面左下角固定显示：**
+### 标准相机光学坐标系
+
+> 📖 **完整的 5 坐标系定义和变换链路见上方「坐标系统详解」章节。** 下面是与 detector_node 直接相关的相机光学系摘要。
+
+本节点输出和显示的坐标遵循**标准针孔相机模型 / OpenCV 光学坐标系**：
+
 ```
-Best: cylinder conf=0.85
-x→0.12m  y↑-0.05m  z=2.30m  d=2.31m
-center=(320, 240)
+         Z+ (光轴，从镜头向外)
+        ↗
+       /
+      相 机 —————→ X+ (右)
+       |
+       ↓
+      Y+ (下)
 ```
+
+**坐标系定义：**
+- **Z+**：沿光轴从镜头指向被拍摄物体（相机"前方"）
+- **X+**：指向相机右侧（画面像素 u 增大方向）
+- **Y+**：指向相机下方（画面像素 v 增大方向）
+- 这是右手定则：X × Y = Z（右 × 下 = 前）
+
+**反投影公式（标准针孔模型，无任何符号翻转）：**
+```
+X = (u - cx) × Z / fx
+Y = (v - cy) × Z / fy
+Z = depth
+```
+
+其中 `(u, v)` 是像素坐标，`(cx, cy)` 是光心像素，`fx, fy` 是焦距。
+
+**画面位置与坐标正负的对应：**
+
+| 目标在画面中的位置 | camera_x (X) | camera_y (Y) | 原因 |
+|-------------------|-------------|-------------|------|
+| 右边 | **正 (+)** | — | u > cx → (u - cx) > 0 |
+| 左边 | **负 (-)** | — | u < cx → (u - cx) < 0 |
+| 下方 | — | **正 (+)** | v > cy → (v - cy) > 0 |
+| 上方 | — | **负 (-)** | v < cy → (v - cy) < 0 |
+| 正中心 | **0** | **0** | u = cx, v = cy |
+
+> **画面上的坐标轴箭头（红 x→ 右、绿 y↓ 下）与数值正负完全一致**：目标在箭头指的方向上，数值就是正的；在反方向上，数值就是负的。
+
+### 相机→机体坐标变换
+
+相机安装在机体下方，镜头朝下，相机外壳的物理"上方"朝向机体前方。相机光学坐标系到机体坐标系的映射：
+
+```
+机体前方 (X_body) = -相机Y  (因为相机 -Y 方向 = 相机物理上方 → 机体前方)
+机体右方 (Y_body) =  相机X  (相机右侧 = 机体右侧)
+机体下方 (Z_body) =  相机Z  (相机光轴 = 指向地面)
+```
+
+这个旋转变换由 TF 树（`d435i_color_optical_frame` → `base_link`）和 `geopose_node` 负责。`detector_node` 只输出**纯净的标准相机光学坐标**，不做任何自定义符号翻转。
+
+### 画面左下角固定面板（飞控状态）
+
+窗口左下角有一个固定面板，显示检测摘要 + 飞控状态：
+
+**飞控未连接时：**
+```
+detected: 3  FPS 18.6
+FC: disconnected
+model: best.pt  device: cpu
+```
+
+**飞控已连接时（有 RTK GPS）：**
+```
+detected: 3  FPS 18.6
+FC: connected  GUIDED  ARM
+Bat: 16.8V  Sat: 20  RTK Fixed
+GPS: 22.1234567  114.1234567  15.23m
+model: best.pt  device: cpu
+```
+
+**面板各行含义：**
+
+| 行 | 字段 | 含义 | 数据来源 |
+|----|------|------|---------|
+| 1 | `detected: N` | 当前帧目标数量（0=无目标） | YOLO 推理结果 |
+| 1 | `FPS X.X` | 推理帧率 | 本地计时 |
+| 2 | `FC: connected` | 飞控连接状态 | `/mavros/state.connected` |
+| 2 | `MODE` | 当前飞行模式（GUIDED/AUTO/LOITER/...） | `/mavros/state.mode` |
+| 2 | `ARM/DISARM` | 解锁状态 | `/mavros/state.armed` |
+| 3 | `Bat: X.XV` | 电池电压 | `/mavros/battery.voltage` |
+| 3 | `Sat: N` | 可见卫星数量 | `/mavros/gpsstatus/gps1/raw.satellites_visible` |
+| 3 | `RTK Fixed` | GPS 定位类型 | `/mavros/gpsstatus/gps1/raw.fix_type` |
+| 4 | `GPS: lat lon alt` | 厘米级大地坐标（WGS84） | `/mavros/global_position/global` |
+
+> **面板数据容错：** 如果 MAVROS 未运行或 `mavros_msgs` 未安装，飞控数据行自动隐藏（只显示 `FC: disconnected`），不影响检测功能。
+>
+> **GPS 坐标精度：** RTK Fixed 模式下，面板显示的经纬度精度可达 7 位小数（厘米级）。`altitude` 为 WGS84 椭球高度 (m)。
+
+### 画面中下区域任务叠加文字 (AIMING!! / DROP!!!)
+
+画面中心偏下位置会根据任务状态叠加闪烁文字：
+
+| 状态 | 显示 | 颜色 | 效果 | 触发条件 |
+|------|------|------|------|---------|
+| 瞄准中 | **AIMING!!** | 黄色 | 0.5Hz 闪烁 | 飞控进入 GUIDED 模式 + MISSION 状态 |
+| 抛投中 | **A DROP!!!** | 红色 | 常亮 3 秒 | main.py 发送 MAVLink 舵机打开指令 |
+
+> **通信原理：** main.py 通过 `/vision/mission_status` 话题 (MissionStatus 消息) 向 detector_node 发送 `aiming` 和 `last_drop` 字段。detector_node 的 `_mission_cb` 回调接收后更新本地状态，`_draw_mission_overlay()` 在每帧画面中下区域叠加对应文字。
+>
+> **为什么选择自定义消息而不是直接监听 MAVLink：** 自定义 ROS 消息 (`MissionStatus`) 更简单可靠——main.py 是任务状态的唯一权威来源，detector_node 只需被动接收显示，不需要解析 MAVLink 协议。这避免了在 detector_node 中引入 pymavlink 依赖和复杂的 MAVLink 消息解析逻辑。
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
@@ -461,40 +1280,137 @@ center=(320, 240)
 | `yolo_conf_threshold` | 0.5 | 低于此值的目标不发布 |
 | `yolo_imgsz` | 640 | 推理分辨率，越小越快 |
 | `target_classes` | `cylinder,tong,barrel,...` | 只显示类别名含这些关键词的目标 |
+| `auto_start_mavros` | true | 自动检测并启动 MAVROS |
+| `mavros_fcu_url` | `/dev/ttyACM0:921600` | 飞控串口地址 |
+| `show_window` | false | 弹出 OpenCV 窗口 |
+| `fc_state_topic` | `/mavros/state` | 飞控状态话题 |
+| `fc_battery_topic` | `/mavros/battery` | 电池状态话题 |
+| `fc_gps_topic` | `/mavros/global_position/global` | GPS 大地坐标话题 |
+| `fc_gpsraw_topic` | `/mavros/gpsstatus/gps1/raw` | GPS 原始数据话题（卫星数+RTK状态） |
 
 ---
 
 ### 5. geopose_node.py — 大地坐标变换
 
-**启动文件：** `cuadc_run.launch`（加 `enable_geopose:=true`）
+**启动文件：** `run_main.launch`（加 `enable_geopose:=true`）
 
-**功能：** 把 YOLO 检测到的目标从相机坐标系一路变换到 WGS84 大地坐标（经纬度 + 海拔）。变换链：相机系 → tf2 → 机体坐标系 → 四元数旋转 → ENU（东北天）→ geographiclib → 经纬高。
+**功能：** 实现完整的坐标变换链：相机光学系 → TF → 机体 FRD → 四元数旋转 → ENU (东北天) → geographiclib → WGS84 (经纬高)。
+
+> 📖 **坐标系定义和变换公式详见上方「坐标系统详解」章节**，涵盖 5 个坐标系的定义、每步变换的公式、物理安装关系和数据流。本节聚焦于节点的使用方式。
+
+**变换流程（代码实现）：**
+```
+1. tf_buffer.transform()       camera_optical_frame → base_link (机体 FRD)
+2. quaternion_rotate_vector()  机体 FRD → ENU (用 MAVROS 姿态四元数旋转)
+3. enu_offset_to_geodetic()    ENU 偏移 → WGS84 经纬高 (Vincenty 正算)
+```
 
 **测试什么：** 验证坐标变换链路是否完整——把目标放到已知 GPS 位置，看输出的经纬度是否接近。
 
 **启动后你可以：**
-- 用 `rostopic echo /competition/target_global` 查看大地坐标
+- 用 `rostopic echo /vision/target_global` 查看大地坐标
 - 结合 QGC 地图验证坐标点是否落在正确位置
 - 飞控收到坐标后可以直接导航到目标上空
+- 查看 GeoTarget 消息中的 `body_x/y/z_m` 和 `enu_east/north/up_m` 中间结果来调试变换链
 
 **启动命令：**
 
 ```bash
-# 一条命令启动 camera + YOLO + geopose
-roslaunch cuadc_vision cuadc_run.launch enable_yolo:=true enable_geopose:=true
+# 一条命令启动 main + camera + YOLO + geopose
+roslaunch cuadc_vision run_main.launch enable_geopose:=true
 ```
 
-**依赖：** 必须 MAVROS 在运行（提供 `/mavros/global_position/global` 和 `/mavros/local_position/pose`）。
+```bash
+# 只测变换链路（需要先启动 MAVROS 和 detector_node）
+roslaunch cuadc_vision run_main.launch enable_geopose:=true auto_arm:=false auto_takeoff:=false
+```
 
-**输出话题：** `/competition/target_global`（类型 GeoTarget，包含 latitude / longitude / altitude）
+**依赖：** MAVROS 运行中，提供：
+- `/mavros/global_position/global` — 无人机 RTK GPS 坐标
+- `/mavros/local_position/pose` — 无人机 ENU 位姿 + 姿态四元数
+- TF 树中 `d435i_color_optical_frame → base_link` 的静态变换
+
+**输出话题：** `/vision/target_global`（类型 GeoTarget）
+
+**GeoTarget 消息字段：**
+
+| 字段 | 坐标系 | 含义 |
+|------|--------|------|
+| `camera_x/y/z_m` | 相机光学系 | 目标在相机系下的 3D 坐标（Step 1 输出） |
+| `body_x/y/z_m` | 机体 FRD | 目标在机体坐标系下的坐标（Step 2 输出） |
+| `enu_east/north/up_m` | ENU | 目标相对无人机的 ENU 偏移（Step 3 输出） |
+| `latitude, longitude, altitude` | WGS84 | 目标大地坐标（Step 4 输出，最终结果） |
+| `valid` / `status` | — | `"ok"` 表示变换成功；其他值见下方状态码 |
+
+**status 状态码：**
+
+| status | 含义 | 处理建议 |
+|--------|------|---------|
+| `ok` | 变换成功，坐标有效 | — |
+| `no_detection` | 当前帧未检测到目标 | 正常，等待检测 |
+| `low_confidence` | 检测置信度低于 `min_confidence` | 调低阈值或等待更好的帧 |
+| `invalid_camera_position` | 深度图无效（depth=0 或 NaN） | 检查深度相机、目标是否在有效距离内 |
+| `no_valid_global_position` | MAVROS 未提供有效 GPS 数据 | 等待 RTK GPS fix |
+| `tf_camera_to_body_failed` | TF 查询相机→机体变换失败 | 检查 TF 树配置 |
 
 **验证是否正常：**
 
 ```bash
-rostopic echo /competition/target_global
-# 看到 latitude / longitude / altitude 有具体数值且 status="ok" 即正常
-# 如果 status="no_valid_global_position"，说明 MAVROS 没提供 GPS 数据
+rostopic echo /vision/target_global
+# status="ok" → 变换链路正常
+# latitude/longitude/altitude 有具体数值
+# 可与 QGC 地图对照验证坐标是否落在正确位置
+
+# 查看中间变换结果（调试用）
+rostopic echo /vision/target_global | grep -E "status|body_|enu_|lat|lon|alt"
 ```
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `detection_topic` | `/vision/yolo/detection` | 订阅的检测结果话题 |
+| `body_frame` | `base_link` | 机体坐标系 TF frame ID |
+| `camera_frame` | `d435i_color_optical_frame` | 相机光学系 TF frame ID |
+| `min_confidence` | 0.30 | 最低检测置信度，低于此值不变换 |
+| `transform_timeout_sec` | 0.10 | TF 查询超时 (s) |
+| `publish_invalid` | true | 是否发布无效/失败的变换结果（调试用） |
+
+<details>
+<summary><b>📐 gptimage 绘图提示 6：geopose_node 变换链代码流程图</b></summary>
+
+```
+A flowchart-style diagram showing the geopose_node internal processing pipeline:
+
+Top: Input boxes
+- "YOLO Detection (camera_x/y/z_m)" from detector_node
+- "MAVROS /local_position/pose (orientation quaternion)" from flight controller
+- "MAVROS /global_position/global (RTK GPS)" from flight controller
+
+Middle: Processing steps in vertical sequence
+Step 1: "transform_camera_to_body()" 
+  - Sub-step: "tf_buffer.transform(camera_frame → body_frame)"
+  - Output: (body_x, body_y, body_z)
+  
+Step 2: "quaternion_rotate_vector()"
+  - Sub-step: "q ⊗ (body_x,body_y,body_z) ⊗ q⁻¹"
+  - Output: (east_m, north_m, up_m)
+  
+Step 3: "enu_offset_to_geodetic()"
+  - Sub-step 1: "atan2(east, north) → azimuth"
+  - Sub-step 2: "√(east²+north²) → horizontal distance"
+  - Sub-step 3: "Geodesic.WGS84.Direct(lat, lon, azimuth, distance)"
+  - Output: (lat, lon, alt + up)
+
+Bottom: Output box
+- "GeoTarget: camera_xyz + body_xyz + enu_enu + lat/lon/alt + status"
+
+Side annotations:
+- Error branches for each step (e.g., TF timeout → "tf_camera_to_body_failed")
+- Key dependencies: TF tree, MAVROS, geographiclib
+
+Label at top: "geopose_node.py 变换流程"
+Style: clean vertical flowchart, code-block style processing steps, Chinese + English labels
+```
+</details>
 
 ---
 
@@ -631,9 +1547,11 @@ roslaunch cuadc_vision run_flight_recorder.launch
 | camera_node | `/d435i/color/image_raw` | 彩色图 |
 | camera_node | `/d435i/aligned_depth/image_raw` | 深度图 |
 | camera_node | `/d435i/color/camera_info` | 相机内参 |
-| detector_node | `/yolo/detection` | 最佳目标 |
-| detector_node | `/yolo/detections` | 全部目标 |
-| geopose_node | `/competition/target_global` | 大地坐标 |
+| detector_node | `/vision/yolo/detection` | 最佳目标 |
+| detector_node | `/vision/yolo/detections` | 全部目标 |
+| detector_node | `/vision/bucket/info` | 目标数量 + 像素偏差 |
+| main.py | `/vision/mission_status` | 弹药/瞄准/抛投事件 |
+| geopose_node | `/vision/target_global` | 大地坐标 |
 | servo_test | `/servo/cmd` | 舵机指令 |
 
 ```bash
@@ -694,7 +1612,21 @@ roslaunch cuadc_vision detector_node.launch
 
 **TF 报错：** MAVROS 是否在运行？`rostopic list | grep mavros`
 
-**坐标不准：** 检查 `invert_camera_x`，镜头朝下设 `true`。
+**坐标与画面不一致：** 确认你理解标准相机光学坐标系的定义：X+ = 右，Y+ = 下，Z+ = 光轴前方。窗口画面中心的坐标轴（红 x→ 右、绿 y↓ 下）标注了正方向。相机→机体的旋转由 TF 树和 geopose_node 负责，detector_node 不做额外翻转。
+
+**detector_node 面板不显示飞控数据：** 检查：
+1. MAVROS 是否运行：`rostopic list | grep mavros`
+2. `mavros_msgs` 是否安装：`dpkg -l | grep ros-noetic-mavros-msgs`
+3. 飞控是否上电连接，GPS 是否有 fix
+4. 终端是否打印 `FC data NOT available`（说明 MAVROS 未运行且 `auto_start_mavros=false`）
+5. 如果 MAVROS 未运行，加 `auto_start_mavros:=true` 让脚本自动启动
+
+**detector_node 面板不显示卫星数：** MAVROS 的 `gps_status` 插件默认可能未启用。检查 `/mavros/gpsstatus/gps1/raw` 话题是否存在：
+```bash
+rostopic list | grep gpsstatus
+# 如果不存在，说明 MAVROS 未加载 gps_status 插件
+# 需要修改 MAVROS 配置或 launch 文件启用它
+```
 
 **舵机不动：** 检查飞控通道映射，确认 CH5/CH6 配置为 servo。
 
