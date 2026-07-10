@@ -2,11 +2,14 @@
 
 > CUADC 2026 全部飞行代码。**本文件夹推送到 GitHub。**
 >
-> ⚠️ **角色分工：**
-> - **Windows 个人电脑：** 用 VS Code 编辑代码 + Git 提交推送，不需要装 ROS，不需要跑任何命令
-> - **NUC 机载电脑（Ubuntu 20.04）：** 拉取代码 → 编译 → 运行，下面所有终端命令都在 NUC 上执行
->
-> NUC 只需拉取 `cuadc_src/` 到 `~/catkin_ws/src/` 即可，详见下方"如何获取代码"。各节点的运行命令见 [cuadc_src/src_README.md](cuadc_src/src_README.md)。
+> 🔥 **开发流程**：
+> ```
+> 队员在自己的 NUC 上开发 → 推到自己文件夹 → GitHub 仓库
+>     → 伍尚京 review → 拷到飞机 NUC 验证
+>     → 验证通过 → 合并进 cuadc_src/（稳定版）
+> ```
+> - `cuadc_src/` = 🔒 伍尚京维护的稳定版。**只有验证过的代码才能进这里。**
+> - `代码/队员名字/` = 队员的独立开发空间，写完 push 上来等 review。
 
 ---
 
@@ -104,106 +107,43 @@
 - 6 通道：抛投器 2（PWM 1100=关闭, 1400=打开）
 - 一个舵机可以驱动两侧抛投器（机械联动），也可以用两个舵机独立控制
 
-## 如何获取代码
+## 工作流程
 
-> 仓库地址：`https://github.com/SteveTNT111/GDPI_CUADC_2026`
-
-### NUC 部署（最常用）
-
-直接把整个仓库克隆下来，然后把 `cuadc_src` 复制到 ROS 工作空间里编译。
-
-**首次部署：**
+### 队员：在自己的 NUC 上开发 → 推到仓库
 
 ```bash
-# 1. 克隆整个仓库到 NUC
-cd ~
-git clone https://github.com/SteveTNT111/GDPI_CUADC_2026.git
-```
+# 1. 在自己的 NUC 上写代码（用 Claude Code / VS Code 都行）
+#    代码放在 ~/catkin_ws/src/你的测试包/
 
-```bash
-# 2. 复制 cuadc_src 到 ROS 工作空间
-rm -rf ~/catkin_ws/src/cuadc_src
-cp -r ~/GDPI_CUADC_2026/代码/cuadc_src ~/catkin_ws/src/cuadc_src
-```
+# 2. 测试通过后，把代码复制到仓库里自己的文件夹
+cp -r ~/catkin_ws/src/你的测试包 ~/GDPI_CUADC_2026/代码/你的名字/
 
-```bash
-# 3. 安装依赖（首次需要）
-sudo apt install -y \
-  ros-noetic-cv-bridge \
-  ros-noetic-image-transport \
-  ros-noetic-tf2-ros \
-  ros-noetic-tf2-geometry-msgs \
-  ros-noetic-mavros-msgs \
-  ros-noetic-mavros
-pip3 install pyrealsense2 opencv-python geographiclib ultralytics rospkg
-```
-
-```bash
-# 4. 编译
-cd ~/catkin_ws
-catkin_make
-source devel/setup.bash
-```
-
-```bash
-# 5. 脚本加执行权限
-chmod +x ~/catkin_ws/src/cuadc_src/scripts/*.py
-```
-
-```bash
-# 6. 放入 YOLO 模型文件（不入库，需手动复制）
-# 把 best.pt 放到 ~/catkin_ws/src/cuadc_src/models/best.pt
-```
-
-**后续拉取最新代码：**
-
-```bash
+# 3. 推送
 cd ~/GDPI_CUADC_2026
-git pull origin main
-rm -rf ~/catkin_ws/src/cuadc_src
-cp -r 代码/cuadc_src ~/catkin_ws/src/cuadc_src
-cd ~/catkin_ws && catkin_make && source devel/setup.bash
+git add 代码/你的名字/
+git commit -m "陈智勇：xxx 功能验证通过"
+git push
 ```
 
-### NUC 部署（省空间）
-
-如果 NUC 硬盘紧张，用稀疏检出只拉 `cuadc_src`，不下载整个仓库：
+### 伍尚京：review → 验证 → 合并进稳定版
 
 ```bash
-mkdir -p ~/cuadc_sparse && cd ~/cuadc_sparse
-git init
-git remote add origin https://github.com/SteveTNT111/GDPI_CUADC_2026.git
+# 1. 拉取队员推送的代码
+cd ~/GDPI_CUADC_2026 && git pull
+
+# 2. review 代码/队员名字/ 下的内容
+
+# 3. 拷贝到飞机 NUC 上验证
+#    （通过 U 盘或 scp）
+
+# 4. 验证通过后，合并进 cuadc_src/
+#    把跑通的代码整理好放进 cuadc_src/scripts/ 或其他对应位置
+
+# 5. 推送稳定版
+git add 代码/cuadc_src
+git commit -m "合并验证通过：陈智勇 xxx 功能"
+git push
 ```
-
-```bash
-git config core.sparseCheckout true
-echo "代码/cuadc_src/" >> .git/info/sparse-checkout
-```
-
-```bash
-git pull origin main
-```
-
-```bash
-rm -rf ~/catkin_ws/src/cuadc_src
-cp -r 代码/cuadc_src ~/catkin_ws/src/cuadc_src
-cd ~ && rm -rf ~/cuadc_sparse
-```
-
-```bash
-cd ~/catkin_ws && catkin_make && source devel/setup.bash
-```
-
-### 个人电脑开发
-
-VS Code 图形界面：`Ctrl+Shift+P` → `Git: Clone` → 输入仓库 URL → 选目录。或用终端：
-
-```bash
-cd ~
-git clone https://github.com/SteveTNT111/GDPI_CUADC_2026.git
-```
-
-开发完成后在 `代码/你的名字/` 下提交，不需要编译 ROS。
 
 ---
 

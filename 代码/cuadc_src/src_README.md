@@ -1,11 +1,10 @@
-# CUADC Vision — 主功能包
+# CUADC SRC — 稳定版功能包
 
-> **包名：** `cuadc_vision`（ROS Noetic）
+> **包名：** `cuadc_src`（ROS Noetic）
 > **用途：** CUADC 2026 全部飞行代码——飞行控制、视觉检测、坐标变换、舵机投放、飞行录像
 > **维护：** 伍尚京
 >
-> ⚠️ **本文档所有命令都是在 NUC（Ubuntu 20.04）的终端里执行的，不是在 Windows 上执行。**
-> 在自己 Windows 电脑上只需用 VS Code 编辑代码 + Git 提交，不需要装 ROS、不需要跑任何命令。
+> 🔒 本文件夹是**稳定版本**。代码来源：队员在自己 NUC 上开发 → 推到仓库自己的文件夹 → 伍尚京 review → 飞机 NUC 验证 → 验证通过后才合并进这里。
 
 ---
 
@@ -444,6 +443,32 @@ WGS84 (World Geodetic System 1984) 是 GPS 使用的全球大地坐标系：
 | **RTK Fixed** | **1~3cm** | **2~5cm** | ✅ 比赛用 |
 
 > 比赛要求使用 RTK Fixed 模式。RTK 通过地面基站发送差分改正数给无人机上的 RTK 接收机（流动站）来实现厘米级定位。
+>
+> **RTK 通信方式：纯单向广播**
+>
+> ```
+> 基准站（地面）                    流动站①（无人机）
+>    📡 ——— RTCM 广播 ———→         📡 接收
+>                          →       流动站②（无人机）
+>                          →       流动站③（无人机）
+>                          →       不限数量，只管听
+>
+>          ← 没有任何回传，不需要双向连接 ←
+> ```
+>
+> 基准站只管往天空喊 RTCM 差分数据，飞机上的流动端只管接收——**不需要建立双向通信链路**。这和 FM 收音机一个道理：电台广播，收音机收听，收音机不需要跟电台说话。
+>
+> ⚠️ 注意区分：P9 数传模块本身**具备**双向通信能力（做 MAVLink 数传时 GCS ↔ 飞机互通），但在 RTK 基站模式下它被配置为 **纯发送模式**（只发不收）。另外，如果你用 4G NTRIP 方式从千寻/CORS 站获取差分数据，那个走的是 TCP 双向连接——但你们用的无线电 RTK 不需要。
+>
+> **RTK 信号广播距离（CUAV C-RTK Base）：**
+>
+> | 距离指标 | 数值 | 含义 |
+> |---------|------|------|
+> | **数传广播距离** | 最远 **30km** | 内置 P9 数传模块的无线电传输能力（理想视距） |
+> | **RTK 有效精度距离** | **10km 以内** | 超过此距离，定位精度从厘米级退化到亚米级 |
+> | **比赛实际距离** | 通常 500m~2km | 你们的比赛场地尺度，信号完全够用 |
+>
+> RTK 基站工作模式是**点对多点广播**——一个基站可以同时服务不限数量的无人机。但注意：30km 是理想视距条件（两端天线无遮挡、架设高度足够），实际中受地形、电磁干扰和天线高度影响会打折扣。比赛场地范围内（通常 < 2km）只要基站天线架好，信号完全没问题。
 
 #### 5.3 ENU → WGS84 变换 (Vincenty 正算)
 
@@ -559,16 +584,16 @@ latitude, longitude, altitude          # Step 4 输出：WGS84 大地坐标
 
 #### 数据源汇总
 
-| 数据 | 来源 | 话题 | 提供节点 |
-|------|------|------|---------|
-| 彩色图像 | D435i RGB 相机 | `/vision/color/image_raw` | `camera_node` |
-| 深度图 | D435i Stereo IR | `/vision/aligned_depth/image_raw` | `camera_node` |
-| 相机内参 | D435i 标定 | `/vision/color/camera_info` | `camera_node` |
-| 无人机 GPS (RTK) | MAVROS | `/mavros/global_position/global` | 外部 (飞控) |
-| 无人机 ENU 位姿 | MAVROS (EKF2) | `/mavros/local_position/pose` | 外部 (飞控) |
-| 相机→机体 TF | TF 静态变换 | `d435i_color_optical_frame→base_link` | 外部 (TF 树) |
-| YOLO 检测结果 | YOLOv8 推理 | `/vision/yolo/detection` | `detector_node` |
-| 大地坐标目标 | 全链路输出 | `/vision/target_global` | `geopose_node` |
+| 数据            | 来源              | 话题                                    | 提供节点            |
+| ------------- | --------------- | ------------------------------------- | --------------- |
+| 彩色图像          | D435i RGB 相机    | `/vision/color/image_raw`             | `camera_node`   |
+| 深度图           | D435i Stereo IR | `/vision/aligned_depth/image_raw`     | `camera_node`   |
+| 相机内参          | D435i 标定        | `/vision/color/camera_info`           | `camera_node`   |
+| 无人机 GPS (RTK) | MAVROS          | `/mavros/global_position/global`      | 外部 (飞控)         |
+| 无人机 ENU 位姿    | MAVROS (EKF2)   | `/mavros/local_position/pose`         | 外部 (飞控)         |
+| 相机→机体 TF      | TF 静态变换         | `d435i_color_optical_frame→base_link` | 外部 (TF 树)       |
+| YOLO 检测结果     | YOLOv8 推理       | `/vision/yolo/detection`              | `detector_node` |
+| 大地坐标目标        | 全链路输出           | `/vision/target_global`               | `geopose_node`  |
 
 <details>
 <summary><b>📐 gptimage 绘图提示 5：完整变换链路全景图</b></summary>
@@ -669,11 +694,11 @@ Style: clean horizontal pipeline, professional technical diagram, Chinese + Engl
 
 此消息由 main.py 以 10Hz 发布，detector_node 订阅后用于画面显示。
 
-| 字段 | 类型 | 含义 |
-|------|------|------|
-| `ammo_a` | uint8 | 前抛投器 (A) 剩余弹药数，0=无/未挂载 |
-| `ammo_b` | uint8 | 后抛投器 (B) 剩余弹药数，0=无/未挂载 |
-| `aiming` | bool | 飞控处于 GUIDED 模式且正在执行对准任务 |
+| 字段          | 类型     | 含义                      |
+| ----------- | ------ | ----------------------- |
+| `ammo_a`    | uint8  | 前抛投器 (A) 剩余弹药数，0=无/未挂载  |
+| `ammo_b`    | uint8  | 后抛投器 (B) 剩余弹药数，0=无/未挂载  |
+| `aiming`    | bool   | 飞控处于 GUIDED 模式且正在执行对准任务 |
 | `last_drop` | string | 最近一次抛投的抛投器编号，"A"/"B"/"" |
 
 > **实现原理：** main.py 在状态机主循环中每 10Hz 调用 `_publish_status()`，将当前弹药、瞄准状态和抛投事件打包发送。detector_node 收到 `last_drop` 非空时触发 3 秒的 "A DROP!!!" 显示。main.py 在 3 秒后自动将 `last_drop` 清空。
@@ -687,23 +712,37 @@ Style: clean horizontal pipeline, professional technical diagram, Chinese + Engl
 
 **启动命令：**
 
+**① 手动模式**——安全第一，调试用：
+
 ```bash
-# ① 手动模式——安全第一，调试用
 roslaunch cuadc_vision run_main.launch
 # 等价于 auto_arm:=false auto_takeoff:=false
 # 启动后什么都不会自动发生，需要你用遥控器操作
+```
 
-# ② 自动起飞——比赛用
+**② 自动起飞**——比赛用：
+
+```bash
 roslaunch cuadc_vision run_main.launch auto_arm:=true auto_takeoff:=true
+```
 
-# ③ 自动起飞 + 指定高度 + 自定义弹药
+**③ 自动起飞 + 指定高度 + 自定义弹药：**
+
+```bash
 roslaunch cuadc_vision run_main.launch \
   auto_arm:=true auto_takeoff:=true takeoff_altitude:=15.0 \
   ammo_a:=2 ammo_b:=0
+```
 
-# ④ 地面测试模式（室内手持测试，不飞行）
+**④ 地面测试模式**（室内手持测试，不飞行）：
+
+```bash
 roslaunch cuadc_vision run_main.launch ground_test:=true
-# 或者只用 rosrun 启动 main.py 单独测试：
+```
+
+或者只用 rosrun 启动 main.py 单独测试：
+
+```bash
 rosrun cuadc_vision main.py _ground_test:=true
 ```
 
