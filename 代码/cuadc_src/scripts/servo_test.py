@@ -6,13 +6,13 @@ servo_test.py — CUADC 2026 抛投器舵机测试节点
 
 功能：
   1. 通过 MAVROS MAV_CMD_DO_SET_SERVO 直接控制飞控舵机输出（不依赖 SERVOx_FUNCTION）
-  2. 终端交互模式：手动输入命令分别控制前/后舵机
+  2. 终端交互模式：手动输入命令分别控制 A/B 舵机
   3. ROS 话题控制：订阅 /servo/cmd 话题接收控制指令
   4. 实时显示飞控连接状态和心跳
 
 舵机配置（前后两个独立舵机）：
-  - 前舵机：SERVO5
-  - 后舵机：SERVO6
+  - A 舵机（前）：SERVO5
+  - B 舵机（后）：SERVO6
   - PWM 1000：关闭
   - PWM 1500：打开
 
@@ -30,10 +30,10 @@ servo_test.py — CUADC 2026 抛投器舵机测试节点
   roslaunch cuadc_vision run_servo_test.launch
 
 终端命令：
-  on / open               → 打开前后全部舵机
-  off / close             → 关闭前后全部舵机
-  front open / front off  → 控制前舵机（CH5）
-  rear open / rear off    → 控制后舵机（CH6）
+  A on / A off            → 控制 A 舵机（前 / CH5）
+  B on / B off            → 控制 B 舵机（后 / CH6）
+  QDFS                    → 同时打开 A/B 舵机
+  all off                 → 同时关闭 A/B 舵机
   q / quit                → 退出
 """
 
@@ -63,13 +63,15 @@ class ServoController:
         # PWM 值（μs）—— 前后两个独立舵机
         self.pwm_open = rospy.get_param("~pwm_open", 1500)
         self.pwm_close = rospy.get_param("~pwm_close", 1000)
-        self.front_servo_channel = 5
-        self.rear_servo_channel = 6
+        self.servo_a_channel = 5
+        self.servo_b_channel = 6
+        self.servo_a_label = "A舵机(前)"
+        self.servo_b_label = "B舵机(后)"
 
         # 初始状态
         self.servo_states = {
-            self.front_servo_channel: False,
-            self.rear_servo_channel: False,
+            self.servo_a_channel: False,
+            self.servo_b_channel: False,
         }
         self.servo_open = False
         self.lock = threading.Lock()
@@ -98,14 +100,14 @@ class ServoController:
         self._set_all_servos(False)
 
         rospy.loginfo(
-            "ServoController 就绪 | 前舵机 CH5=%s 后舵机 CH6=%s | PWM_close=%d PWM_open=%d",
+            "ServoController 就绪 | A舵机 CH5=%s B舵机 CH6=%s | PWM_close=%d PWM_open=%d",
             "启用" if self.enable_ch5 else "禁用",
             "启用" if self.enable_ch6 else "禁用",
             self.pwm_close,
             self.pwm_open,
         )
         rospy.loginfo(
-            "终端命令: on/off 控制全部 | front open/off 控制前舵机 | rear open/off 控制后舵机"
+            "终端命令: A on/off | B on/off | QDFS | all off"
         )
 
     # ==================== 飞控连接 ====================
@@ -184,10 +186,10 @@ class ServoController:
     def _set_all_servos(self, state):
         ok = True
         ok = self._set_single_servo(
-            self.front_servo_channel, "前舵机", self.enable_ch5, state
+            self.servo_a_channel, self.servo_a_label, self.enable_ch5, state
         ) and ok
         ok = self._set_single_servo(
-            self.rear_servo_channel, "后舵机", self.enable_ch6, state
+            self.servo_b_channel, self.servo_b_label, self.enable_ch6, state
         ) and ok
         return ok
 
@@ -228,31 +230,31 @@ class ServoController:
 
     def _handle_command(self, cmd):
         cmd = " ".join(cmd.split())
-        if cmd in ("on", "open", "1", "true"):
+        if cmd in ("qdfs", "all on", "all open", "on", "open", "1", "true"):
             self._set_all_servos(True)
-        elif cmd in ("off", "close", "0", "false"):
+        elif cmd in ("all off", "off", "close", "0", "false"):
             self._set_all_servos(False)
         elif cmd == "toggle":
             with self.lock:
                 next_state = not self.servo_open
             self._set_all_servos(next_state)
-        elif cmd.startswith(("front ", "ch5 ", "5 ", "a ")):
+        elif cmd.startswith(("a ", "ch5 ", "5 ", "front ")):
             self._handle_target_command(
                 cmd.split(" ", 1)[1],
-                self.front_servo_channel,
-                "前舵机",
+                self.servo_a_channel,
+                self.servo_a_label,
                 self.enable_ch5,
             )
-        elif cmd.startswith(("rear ", "ch6 ", "6 ", "b ")):
+        elif cmd.startswith(("b ", "ch6 ", "6 ", "rear ")):
             self._handle_target_command(
                 cmd.split(" ", 1)[1],
-                self.rear_servo_channel,
-                "后舵机",
+                self.servo_b_channel,
+                self.servo_b_label,
                 self.enable_ch6,
             )
         else:
             rospy.logwarn(
-                "无法识别的指令: '%s' (支持: on/off/open/close/toggle/front open/front off/rear open/rear off)",
+                "无法识别的指令: '%s' (支持: A on/A off/B on/B off/QDFS/all off)",
                 cmd,
             )
 
@@ -276,18 +278,17 @@ class ServoController:
         print("=" * 55)
         print("  舵机测试终端  —  MAV_CMD_DO_SET_SERVO")
         print("  %s" % self._fc_status_str())
-        print("  输入 on/open        → 打开前后舵机 (PWM=%d)" % self.pwm_open)
-        print("  输入 off/close      → 关闭前后舵机 (PWM=%d)" % self.pwm_close)
-        print("  输入 front open/off → 控制前舵机 (CH5)")
-        print("  输入 rear open/off  → 控制后舵机 (CH6)")
-        print("  输入 status    → 刷新飞控连接状态")
-        print("  输入 q/quit    → 退出")
+        print("  A on/off   → A舵机(前/CH5)")
+        print("  B on/off   → B舵机(后/CH6)")
+        print("  QDFS       → 全弹发射 (同时打开)")
+        print("  all off    → 全部关闭 (PWM=%d)" % self.pwm_close)
+        print("  status     → 刷新状态 | q 退出")
         print("=" * 55)
         print("")
 
         while not rospy.is_shutdown():
             try:
-                cmd = input_func("servo> ").strip().lower()
+                cmd = input_func("ab> ").strip().lower()
                 if not cmd:
                     continue
                 if cmd in ("q", "quit", "exit"):

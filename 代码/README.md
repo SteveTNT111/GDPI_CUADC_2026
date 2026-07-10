@@ -83,7 +83,7 @@
 | 脚本 | 功能 | 运行方式 |
 |------|------|---------|
 | `main.py` | 状态机主控：切换飞行模式 → 起飞 → 巡航 → 识别 → 对准 → 投放 → 返航 | `roslaunch cuadc_vision run_main.launch` |
-| `servo_test.py` | 舵机测试：终端输入 `on`/`off` 控制 5/6 通道 PWM（1100/1400） | `roslaunch cuadc_vision run_servo_test.launch` |
+| `servo_test.py` | 舵机测试：终端输入 `A/B on/off`、`QDFS`、`all off` 控制 5/6 通道 PWM | `roslaunch cuadc_vision run_servo_test.launch` |
 | `camera_node.py` | D435i 驱动，发布 RGB + 深度图 | `roslaunch cuadc_vision camera_node.launch` |
 | `detector_node.py` | YOLO 目标检测，弹 OpenCV 窗口 | `roslaunch cuadc_vision detector_node.launch` |
 | `geopose_node.py` | 相机系 → 机体 → ENU → 大地坐标变换 | 由 run_main.launch 自动启动（可选） |
@@ -103,8 +103,8 @@
 
 ### 舵机说明
 
-- 5 通道：抛投器 1（PWM 1100=关闭, 1400=打开）
-- 6 通道：抛投器 2（PWM 1100=关闭, 1400=打开）
+- 5 通道：A 舵机，对应前方抛投器
+- 6 通道：B 舵机，对应后方抛投器
 - 一个舵机可以驱动两侧抛投器（机械联动），也可以用两个舵机独立控制
 
 ## 工作流程

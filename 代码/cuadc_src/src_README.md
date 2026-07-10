@@ -15,7 +15,7 @@
 cuadc_src/
 ├── scripts/                                   # Python 节点（7个）
 │   ├── main.py                                #   主控：状态机 + 模式切换 + 起飞
-│   ├── servo_test.py                          #   舵机测试：终端 on/off 控制 CH5/CH6
+│   ├── servo_test.py                          #   舵机测试：终端 A/B on/off 控制 CH5/CH6
 │   ├── camera_node.py                         #   D435i 相机驱动
 │   ├── detector_node.py                       #   YOLO 目标检测
 │   ├── geopose_node.py                        #   坐标变换（相机→机体→ENU→WGS84）
@@ -742,8 +742,8 @@ rosrun cuadc_vision main.py _ground_test:=true
 | `drop_cooldown_s` | 5.0 | 两次抛投冷却间隔 (s) |
 | `ammo_a` | 1 | 前抛投器 (A) 初始弹药数 |
 | `ammo_b` | 0 | 后抛投器 (B) 初始弹药数 (0=未挂载) |
-| `front_servo_channel` | 5 | 前抛投器舵机通道 |
-| `rear_servo_channel` | 6 | 后抛投器舵机通道 |
+| `front_servo_channel` | 5 | A 舵机通道（前抛投器） |
+| `rear_servo_channel` | 6 | B 舵机通道（后抛投器） |
 | `pwm_open` | 1500 | 抛投器打开 PWM (μs) |
 | `pwm_close` | 1000 | 抛投器关闭 PWM (μs) |
 | `servo_hold_s` | 0.8 | 打开后保持时间 (s) |
@@ -789,8 +789,8 @@ roslaunch cuadc_vision detector_node.launch show_window:=true
   检测到 1 个目标 → 自动切换 GUIDED 模式
   目标已对准 | x=0.023 y=-0.015 (< 10cm) | 开始 3.0s 稳定计时...
   稳定对准 3.0s | x=0.023 y=-0.015 | 触发抛投！
-  舵机 前舵机(CH5) → 打开 (PWM=1500)
-  舵机 前舵机(CH5) → 关闭 (PWM=1000)
+  舵机 A舵机(前)(CH5) → 打开 (PWM=1500)
+  舵机 A舵机(前)(CH5) → 关闭 (PWM=1000)
   抛投完成！A 抛投器 | 剩余 A=0 B=0 | 冷却 5.0s
   ```
 
@@ -839,23 +839,24 @@ if has_pose and self.current_state.connected:
 
 **启动文件：** `run_servo_test.launch`
 
-**功能：** 通过 MAVLink `MAV_CMD_DO_SET_SERVO` 指令直接控制飞控舵机输出引脚，不经过飞控逻辑（无需设置 `SERVOx_FUNCTION`）。当前脚本按**前/后两个独立舵机**工作：
+**功能：** 通过 MAVLink `MAV_CMD_DO_SET_SERVO` 指令直接控制飞控舵机输出引脚，不经过飞控逻辑（无需设置 `SERVOx_FUNCTION`）。当前脚本按 **A/B 两个独立舵机** 工作：
 
-- 前舵机：`SERVO5`
-- 后舵机：`SERVO6`
+- A 舵机（前）：`SERVO5`
+- B 舵机（后）：`SERVO6`
 - `pwm_close=1000`：关闭
 - `pwm_open=1500`：打开
 
-`on/off` 会同时控制 CH5 和 CH6；`front ...` / `rear ...` 可单独控制。
+终端主命令已简化为：`A on/off`、`B on/off`、`QDFS`、`all off`。
 
 **飞控参数要求：** `SERVO5_FUNCTION` / `SERVO6_FUNCTION` 保持 **0 (Disabled)**，飞控不碰这个引脚。`RC_OVERRIDE_TIME` 必须 > 0（默认 3 即可），设成 0 会拒绝所有外部指令。
 
 **测试什么：** 验证舵机接线是否正确、PWM 值是否能驱动抛投器、机械结构是否顺畅。**不需要飞机起飞，地上就能测。**
 
 **启动后你可以：**
-- 在终端输入 `on` → 前后舵机都转到 `pwm_open`（默认 1500）
-- 在终端输入 `off` → 舵机转到 PWM 1000，两个抛投器都关闭
-- 输入 `front open/off`、`rear open/off` → 单独控制前/后舵机
+- 在终端输入 `A on` / `A off` → 单独控制 A 舵机（前 / CH5）
+- 在终端输入 `B on` / `B off` → 单独控制 B 舵机（后 / CH6）
+- 输入 `QDFS` → A/B 两个舵机同时打开
+- 输入 `all off` → A/B 两个舵机同时关闭
 - 输入 `status` → 刷新飞控连接状态
 - 输入 `q` 退出
 - 也可以通过 ROS 话题远程控制（见下方）
@@ -865,24 +866,24 @@ if has_pose and self.current_state.connected:
 ```bash
 # ① 默认：CH5 和 CH6 都启用
 roslaunch cuadc_vision run_servo_test.launch
-# 启动后终端显示 "servo>" 提示符，输入 on/off 控制
+# 启动后终端显示 "ab>" 提示符
 ```
 
 ```bash
-# ② 只测前舵机（禁用 CH6）
+# ② 只测 A 舵机（禁用 CH6）
 roslaunch cuadc_vision run_servo_test.launch enable_ch6:=false
 ```
 
 ```bash
 # ③ 通过 ROS 话题控制（另开终端，无需交互）
-rostopic pub /servo/cmd std_msgs/String "data: 'on'"
+rostopic pub /servo/cmd std_msgs/String "data: 'A on'"
 ```
 
 ```bash
-rostopic pub /servo/cmd std_msgs/String "data: 'off'"
+rostopic pub /servo/cmd std_msgs/String "data: 'QDFS'"
 ```
 
-**验证是否正常：** 输入 `on` 后舵机应转动并保持，终端会打印类似 `舵机 前舵机(CH5) → 打开 (PWM=1500)`、`舵机 后舵机(CH6) → 打开 (PWM=1500)`。舵机不动则检查飞控是否上电、MAVROS 是否连通、通道映射是否正确。
+**验证是否正常：** 输入 `A on` 后前方舵机应转动并保持，终端会打印类似 `舵机 A舵机(前)(CH5) → 打开 (PWM=1500)`；输入 `B on` 时应打印 `舵机 B舵机(后)(CH6) → 打开 (PWM=1500)`。`QDFS` 会同时打开两个舵机，`all off` 会统一关闭。舵机不动则检查飞控是否上电、MAVROS 是否连通、通道映射是否正确。
 
 ---
 
