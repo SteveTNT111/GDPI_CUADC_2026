@@ -14,10 +14,14 @@
   <arg name="fps" default="30" />
 
   <!-- YOLO 参数 -->
-  <arg name="yolo_model_path" default="$(find cuadc_vision)/models/best.pt" />
+  <arg name="yolo_model_path" default="$(find cuadc_vision)/models/best.onnx" />
   <arg name="yolo_device" default="cpu" />
-  <arg name="yolo_conf_threshold" default="0.5" />
+  <arg name="yolo_conf_threshold" default="0.6" />
   <arg name="show_window" default="false" />
+  <arg name="yolo_class_names" default="cylinder" />
+  <arg name="yolo_target_classes" default="cylinder" />
+  <arg name="yolo_cv_threads" default="1" />
+  <arg name="yolo_omp_threads" default="8" />
 
   <!-- 相机驱动 -->
   <node pkg="cuadc_vision"
@@ -32,9 +36,17 @@
         type="detector_node.py"
         name="detector_node"
         output="screen">
+    <env name="ULTRALYTICS_SKIP_REQUIREMENTS_CHECKS" value="1" />
+    <env name="OMP_NUM_THREADS" value="$(arg yolo_omp_threads)" />
+    <env name="MKL_NUM_THREADS" value="$(arg yolo_omp_threads)" />
+    <env name="OMP_WAIT_POLICY" value="PASSIVE" />
+    <env name="OMP_PROC_BIND" value="FALSE" />
     <param name="model_path" value="$(arg yolo_model_path)" />
     <param name="device" value="$(arg yolo_device)" />
     <param name="conf_threshold" value="$(arg yolo_conf_threshold)" />
     <param name="show_window" value="$(arg show_window)" />
+    <param name="class_names" value="$(arg yolo_class_names)" />
+    <param name="target_classes" value="$(arg yolo_target_classes)" />
+    <param name="cv_threads" value="$(arg yolo_cv_threads)" />
   </node>
 </launch>

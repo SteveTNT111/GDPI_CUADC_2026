@@ -31,7 +31,7 @@ class AutoDropNode:
         self.reset_pwm = int(rospy.get_param("~reset_pwm", 1100))
         self.hold_seconds = float(rospy.get_param("~hold_seconds", 0.8))
         self.pixel_threshold = float(rospy.get_param("~pixel_threshold", 20.0))
-        self.min_conf = float(rospy.get_param("~min_conf", 0.5))
+        self.min_conf = float(rospy.get_param("~min_conf", 0.6))
         self.cooldown = float(rospy.get_param("~cooldown", 2.0))
 
         self.camera_info = None

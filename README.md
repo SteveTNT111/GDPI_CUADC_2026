@@ -53,7 +53,7 @@ GDPI_CUADC_2026/
 │   └── d435i-intel-realsense-1.snapshot.1/  #   D435i 相机 SolidWorks 模型
 │
 ├── 代码/                                    # 全部飞行代码
-│   ├── README.md                            #   代码目录详细说明
+│   ├── CODE_README.md                       #   代码目录详细说明
 │   ├── cuadc_src/                           #   🔒 主功能包（伍尚京维护）
 │   │   ├── scripts/                         #     Python 节点
 │   │   ├── launch/                          #     启动文件
