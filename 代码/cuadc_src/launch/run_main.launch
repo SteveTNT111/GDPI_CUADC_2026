@@ -2,6 +2,7 @@
   <!--
     runmain.launch — CUADC 2026 总启动文件
     启动内容：
+      0. MAVROS（可选自动启动）— 飞控通信桥接
       1. main.py        飞行主控（状态机 + 模式切换 + 起飞）
       2. camera_node     D435i 相机驱动
       3. detector_node   YOLO 目标检测
@@ -10,6 +11,8 @@
     运行方式：
       roslaunch cuadc_vision runmain.launch
       roslaunch cuadc_vision runmain.launch auto_arm:=true auto_takeoff:=true
+      roslaunch cuadc_vision runmain.launch ground_test:=true
+      roslaunch cuadc_vision runmain.launch fcu_url:=/dev/ttyUSB0:921600
   -->
 
   <!-- ==================== 全局参数 ==================== -->
@@ -22,6 +25,17 @@
   <arg name="takeoff_altitude" default="10.0" />
   <arg name="auto_arm" default="false" />
   <arg name="auto_takeoff" default="false" />
+  <arg name="ground_test" default="false" />
+
+  <!-- MAVROS 参数 -->
+  <arg name="fcu_url" default="/dev/ttyACM0:921600" />
+  <arg name="auto_start_mavros" default="true" />
+
+  <!-- ==================== 0. 自动启动 MAVROS ==================== -->
+  <include if="$(arg auto_start_mavros)"
+           file="$(find mavros)/launch/apm.launch">
+    <arg name="fcu_url" value="$(arg fcu_url)" />
+  </include>
 
   <!-- ==================== 1. 飞行主控 ==================== -->
   <node pkg="cuadc_vision"
@@ -32,6 +46,9 @@
     <param name="takeoff_altitude" value="$(arg takeoff_altitude)" />
     <param name="auto_arm" value="$(arg auto_arm)" />
     <param name="auto_takeoff" value="$(arg auto_takeoff)" />
+    <param name="ground_test" value="$(arg ground_test)" />
+    <param name="auto_start_mavros" value="$(arg auto_start_mavros)" />
+    <param name="mavros_fcu_url" value="$(arg fcu_url)" />
   </node>
 
   <!-- ==================== 2. D435i 相机 ==================== -->

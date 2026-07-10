@@ -144,7 +144,6 @@ draw_panel(image, lines, img_w, img_h):
 | `model_path` | `$(find cuadc_vision)/models/best.pt` | `__init__` rospkg 查找 |
 | `conf_threshold` | 0.5 | `image_callback` → `self.model(frame, conf=...)` |
 | `target_classes` | `cylinder,tong,barrel,...` | `build_results` → `_is_target_class()` |
-| `invert_camera_x` | true | `project_pixel` 最后 sign 取反 |
 | `show_window` | false | `image_callback` 最后一步 |
 | `depth_patch_radius` | 2 | `lookup_depth` median 区域半径 |
 

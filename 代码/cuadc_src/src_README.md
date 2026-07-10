@@ -1,10 +1,11 @@
-# CUADC SRC — 稳定版功能包
+# CUADC Vision — 主功能包
 
-> **包名：** `cuadc_src`（ROS Noetic）
+> **包名：** `cuadc_vision`（ROS Noetic）
 > **用途：** CUADC 2026 全部飞行代码——飞行控制、视觉检测、坐标变换、舵机投放、飞行录像
 > **维护：** 伍尚京
 >
-> 🔒 本文件夹是**稳定版本**。代码来源：队员在自己 NUC 上开发 → 推到仓库自己的文件夹 → 伍尚京 review → 飞机 NUC 验证 → 验证通过后才合并进这里。
+> ⚠️ **本文档所有命令都是在 NUC（Ubuntu 20.04）的终端里执行的，不是在 Windows 上执行。**
+> 在自己 Windows 电脑上只需用 VS Code 编辑代码 + Git 提交，不需要装 ROS、不需要跑任何命令。
 
 ---
 
@@ -443,32 +444,6 @@ WGS84 (World Geodetic System 1984) 是 GPS 使用的全球大地坐标系：
 | **RTK Fixed** | **1~3cm** | **2~5cm** | ✅ 比赛用 |
 
 > 比赛要求使用 RTK Fixed 模式。RTK 通过地面基站发送差分改正数给无人机上的 RTK 接收机（流动站）来实现厘米级定位。
->
-> **RTK 通信方式：纯单向广播**
->
-> ```
-> 基准站（地面）                    流动站①（无人机）
->    📡 ——— RTCM 广播 ———→         📡 接收
->                          →       流动站②（无人机）
->                          →       流动站③（无人机）
->                          →       不限数量，只管听
->
->          ← 没有任何回传，不需要双向连接 ←
-> ```
->
-> 基准站只管往天空喊 RTCM 差分数据，飞机上的流动端只管接收——**不需要建立双向通信链路**。这和 FM 收音机一个道理：电台广播，收音机收听，收音机不需要跟电台说话。
->
-> ⚠️ 注意区分：P9 数传模块本身**具备**双向通信能力（做 MAVLink 数传时 GCS ↔ 飞机互通），但在 RTK 基站模式下它被配置为 **纯发送模式**（只发不收）。另外，如果你用 4G NTRIP 方式从千寻/CORS 站获取差分数据，那个走的是 TCP 双向连接——但你们用的无线电 RTK 不需要。
->
-> **RTK 信号广播距离（CUAV C-RTK Base）：**
->
-> | 距离指标 | 数值 | 含义 |
-> |---------|------|------|
-> | **数传广播距离** | 最远 **30km** | 内置 P9 数传模块的无线电传输能力（理想视距） |
-> | **RTK 有效精度距离** | **10km 以内** | 超过此距离，定位精度从厘米级退化到亚米级 |
-> | **比赛实际距离** | 通常 500m~2km | 你们的比赛场地尺度，信号完全够用 |
->
-> RTK 基站工作模式是**点对多点广播**——一个基站可以同时服务不限数量的无人机。但注意：30km 是理想视距条件（两端天线无遮挡、架设高度足够），实际中受地形、电磁干扰和天线高度影响会打折扣。比赛场地范围内（通常 < 2km）只要基站天线架好，信号完全没问题。
 
 #### 5.3 ENU → WGS84 变换 (Vincenty 正算)
 
@@ -584,16 +559,16 @@ latitude, longitude, altitude          # Step 4 输出：WGS84 大地坐标
 
 #### 数据源汇总
 
-| 数据            | 来源              | 话题                                    | 提供节点            |
-| ------------- | --------------- | ------------------------------------- | --------------- |
-| 彩色图像          | D435i RGB 相机    | `/vision/color/image_raw`             | `camera_node`   |
-| 深度图           | D435i Stereo IR | `/vision/aligned_depth/image_raw`     | `camera_node`   |
-| 相机内参          | D435i 标定        | `/vision/color/camera_info`           | `camera_node`   |
-| 无人机 GPS (RTK) | MAVROS          | `/mavros/global_position/global`      | 外部 (飞控)         |
-| 无人机 ENU 位姿    | MAVROS (EKF2)   | `/mavros/local_position/pose`         | 外部 (飞控)         |
-| 相机→机体 TF      | TF 静态变换         | `d435i_color_optical_frame→base_link` | 外部 (TF 树)       |
-| YOLO 检测结果     | YOLOv8 推理       | `/vision/yolo/detection`              | `detector_node` |
-| 大地坐标目标        | 全链路输出           | `/vision/target_global`               | `geopose_node`  |
+| 数据 | 来源 | 话题 | 提供节点 |
+|------|------|------|---------|
+| 彩色图像 | D435i RGB 相机 | `/vision/color/image_raw` | `camera_node` |
+| 深度图 | D435i Stereo IR | `/vision/aligned_depth/image_raw` | `camera_node` |
+| 相机内参 | D435i 标定 | `/vision/color/camera_info` | `camera_node` |
+| 无人机 GPS (RTK) | MAVROS | `/mavros/global_position/global` | 外部 (飞控) |
+| 无人机 ENU 位姿 | MAVROS (EKF2) | `/mavros/local_position/pose` | 外部 (飞控) |
+| 相机→机体 TF | TF 静态变换 | `d435i_color_optical_frame→base_link` | 外部 (TF 树) |
+| YOLO 检测结果 | YOLOv8 推理 | `/vision/yolo/detection` | `detector_node` |
+| 大地坐标目标 | 全链路输出 | `/vision/target_global` | `geopose_node` |
 
 <details>
 <summary><b>📐 gptimage 绘图提示 5：完整变换链路全景图</b></summary>
@@ -678,7 +653,20 @@ Style: clean horizontal pipeline, professional technical diagram, Chinese + Engl
 
 **启动文件：** `run_main.launch`
 
-**功能：** 通过 MAVROS 控制无人机完成全自动飞行流程。内部是一个状态机，依次执行：等待连接 → 检查 EKF/GPS → 切换 GUIDED 模式 → 解锁 → 起飞 → 悬停待命 → 执行任务（自动瞄准 + 自动抛投）→ 着陆/返航。集成了舵机控制功能和弹药管理。支持 `ground_test:=true` 地面测试模式，跳过 EKF 和起飞，解锁后直接进入 MISSION 状态。
+**功能：** 通过 MAVROS 控制无人机并维护任务状态机，集成舵机控制和弹药管理。当前代码的实际状态流转是：
+
+```text
+INIT → PREARM → ARMED → TAKEOFF → HOLD
+                    └─(ground_test=true)→ MISSION
+```
+
+- `PREARM`：等待 EKF 就绪；若 `auto_arm=false`，继续等待飞控已经处于 `armed=true`
+- `ARMED`：非地面测试时会尝试切 `GUIDED`，随后在 `auto_takeoff=true` 时发送起飞指令
+- `HOLD`：当前代码不会自动进入 `MISSION`，需要外部调用 `set_mission()`
+- `LAND` / `RTL`：当前也只会在外部调用 `trigger_land()` / `trigger_rtl()` 后执行
+- `ground_test:=true`：跳过 EKF 检查；进入 `ARMED` 后直接切到 `MISSION`
+
+> 注意：`auto_arm` 这个参数当前**不会主动调用** `/mavros/cmd/arming` 解锁服务；它只是在 `PREARM` 阶段跳过“等待已解锁”的阻塞。
 
 **MISSION 状态自动任务：**
 1. **自动切 GUIDED**：检测到目标数量 > 0 且当前非 GUIDED 模式 → 自动切换到 GUIDED
@@ -694,67 +682,58 @@ Style: clean horizontal pipeline, professional technical diagram, Chinese + Engl
 
 此消息由 main.py 以 10Hz 发布，detector_node 订阅后用于画面显示。
 
-| 字段          | 类型     | 含义                      |
-| ----------- | ------ | ----------------------- |
-| `ammo_a`    | uint8  | 前抛投器 (A) 剩余弹药数，0=无/未挂载  |
-| `ammo_b`    | uint8  | 后抛投器 (B) 剩余弹药数，0=无/未挂载  |
-| `aiming`    | bool   | 飞控处于 GUIDED 模式且正在执行对准任务 |
+| 字段 | 类型 | 含义 |
+|------|------|------|
+| `ammo_a` | uint8 | 前抛投器 (A) 剩余弹药数，0=无/未挂载 |
+| `ammo_b` | uint8 | 后抛投器 (B) 剩余弹药数，0=无/未挂载 |
+| `aiming` | bool | 飞控处于 GUIDED 模式且正在执行对准任务 |
 | `last_drop` | string | 最近一次抛投的抛投器编号，"A"/"B"/"" |
 
 > **实现原理：** main.py 在状态机主循环中每 10Hz 调用 `_publish_status()`，将当前弹药、瞄准状态和抛投事件打包发送。detector_node 收到 `last_drop` 非空时触发 3 秒的 "A DROP!!!" 显示。main.py 在 3 秒后自动将 `last_drop` 清空。
 
-**测试什么：** 验证飞控与机载电脑的 MAVROS 通信是否正常，验证 GUIDED 模式下起飞→悬停→着陆的完整链路。
+**测试什么：** 验证飞控与机载电脑的 MAVROS 通信是否正常，验证等待连接 → EKF 检查 → GUIDED 切换 → 起飞 → 悬停，以及 `MISSION` 状态下的自动瞄准/抛投链路。
 
 **启动后你可以：**
-- 手动模式（默认）：启动后终端会打印当前状态，用遥控器或 QGC 手动解锁起飞，main.py 会跟随状态变化
-- 自动模式：加 `auto_arm:=true auto_takeoff:=true`，启动后无人机会自动完成解锁→起飞→悬停，无需遥控器干预
-- **地面测试模式**：加 `ground_test:=true`，跳过 EKF 检查 + 跳过 GUIDED 切换和起飞，解锁后直接进入 MISSION 状态。适用于室内手持飞机对准圆筒测试自动抛投逻辑（见下方"室内地面测试流程"）
+- 手动模式（默认）：脚本等待飞控连接和 EKF 就绪；解锁后会进入 `ARMED`，随后尝试切 `GUIDED`
+- 半自动模式：加 `auto_arm:=true auto_takeoff:=true` 后，脚本会跳过 `PREARM` 的“等待已解锁”步骤，并在 `ARMED` 状态尝试发送起飞指令；但当前代码**不会主动解锁**
+- **地面测试模式**：加 `ground_test:=true`，跳过 EKF 检查；进入 `ARMED` 后直接进入 `MISSION` 状态，适合室内手持测试自动抛投逻辑
 
 **启动命令：**
 
-**① 手动模式**——安全第一，调试用：
-
 ```bash
+# ① 手动模式——安全第一，调试用
 roslaunch cuadc_vision run_main.launch
 # 等价于 auto_arm:=false auto_takeoff:=false
 # 启动后什么都不会自动发生，需要你用遥控器操作
-```
 
-**② 自动起飞**——比赛用：
-
-```bash
+# ② 尝试自动起飞
 roslaunch cuadc_vision run_main.launch auto_arm:=true auto_takeoff:=true
-```
 
-**③ 自动起飞 + 指定高度 + 自定义弹药：**
-
-```bash
+# ③ 自动起飞 + 指定高度
 roslaunch cuadc_vision run_main.launch \
-  auto_arm:=true auto_takeoff:=true takeoff_altitude:=15.0 \
-  ammo_a:=2 ammo_b:=0
-```
+  auto_arm:=true auto_takeoff:=true takeoff_altitude:=15.0
 
-**④ 地面测试模式**（室内手持测试，不飞行）：
+# ④ 修改 main.py 私有参数（run_main.launch 当前未暴露 ammo_a/ammo_b 等参数）
+rosrun cuadc_vision main.py \
+  _ammo_a:=2 _ammo_b:=0 _enable_auto_guided:=false
 
-```bash
+# ⑤ 地面测试模式（室内手持测试，不飞行）
 roslaunch cuadc_vision run_main.launch ground_test:=true
-```
-
-或者只用 rosrun 启动 main.py 单独测试：
-
-```bash
+# 或者只用 rosrun 启动 main.py 单独测试：
 rosrun cuadc_vision main.py _ground_test:=true
 ```
 
-**依赖：** 必须先启动 MAVROS（`roslaunch mavros apm.launch`），飞控已连接且 GPS 有 fix。
+**依赖：** 脚本会自动检查并启动 `roscore`。若 `auto_start_mavros:=true`（默认），还会自动拉起 `roslaunch mavros apm.launch`；若关闭该参数，则需要你自己先启动 MAVROS。
 
-**验证是否正常：** 终端应依次打印 `飞控已连接 → EKF 就绪 → 解锁成功 → 起飞指令已发送 → 到达目标高度`。MISSION 状态下检测到目标后终端打印 `检测到 N 个目标 → 自动切换 GUIDED 模式`。
+**验证是否正常：** 终端应依次打印 `飞控已连接 → EKF 就绪`，随后根据模式继续看到 `飞行模式切换至: GUIDED`、`起飞指令已发送`、`到达目标高度` 等日志。`MISSION` 状态下检测到目标后终端打印 `检测到 N 个目标 → 自动切换 GUIDED 模式`。
+
+> `run_main.launch` 当前只暴露了 `takeoff_altitude`、`auto_arm`、`auto_takeoff`、`ground_test`、`fcu_url`、`auto_start_mavros`、`enable_geopose`、`fps`、`yolo_model_path`、`yolo_device` 这些 launch 参数。其余 `main.py` 私有参数需要用 `rosrun ... _param:=value`，或自行在 launch 文件中增加 `<param>`。
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `takeoff_altitude` | 10.0 | 起飞目标高度 (m) |
-| `auto_arm` | false | true = 启动后自动解锁 |
-| `auto_takeoff` | false | true = 解锁后自动起飞 |
+| `auto_arm` | false | true = 跳过 PREARM 中“等待已解锁”步骤；**不会主动发送解锁命令** |
+| `auto_takeoff` | false | true = 在 `ARMED` 状态发送起飞指令 |
 | `ground_test` | false | true = 地面测试模式（跳过 EKF + 跳过起飞，解锁后直接进入 MISSION） |
 | `enable_auto_guided` | true | 检测到目标时自动切 GUIDED |
 | `enable_auto_drop` | true | 对准后自动抛投 |
@@ -763,9 +742,9 @@ rosrun cuadc_vision main.py _ground_test:=true
 | `drop_cooldown_s` | 5.0 | 两次抛投冷却间隔 (s) |
 | `ammo_a` | 1 | 前抛投器 (A) 初始弹药数 |
 | `ammo_b` | 0 | 后抛投器 (B) 初始弹药数 (0=未挂载) |
-| `enable_ch5` | true | 启用 SERVO5 舵机通道 |
-| `enable_ch6` | false | 启用 SERVO6 舵机通道 |
-| `pwm_open` | 2000 | 抛投器打开 PWM (μs) |
+| `front_servo_channel` | 5 | 前抛投器舵机通道 |
+| `rear_servo_channel` | 6 | 后抛投器舵机通道 |
+| `pwm_open` | 1500 | 抛投器打开 PWM (μs) |
 | `pwm_close` | 1000 | 抛投器关闭 PWM (μs) |
 | `servo_hold_s` | 0.8 | 打开后保持时间 (s) |
 
@@ -810,8 +789,8 @@ roslaunch cuadc_vision detector_node.launch show_window:=true
   检测到 1 个目标 → 自动切换 GUIDED 模式
   目标已对准 | x=0.023 y=-0.015 (< 10cm) | 开始 3.0s 稳定计时...
   稳定对准 3.0s | x=0.023 y=-0.015 | 触发抛投！
-  舵机 CH5 → 打开 (PWM=2000)
-  舵机 CH5 → 关闭 (PWM=1000)
+  舵机 前舵机(CH5) → 打开 (PWM=1500)
+  舵机 前舵机(CH5) → 关闭 (PWM=1000)
   抛投完成！A 抛投器 | 剩余 A=0 B=0 | 冷却 5.0s
   ```
 
@@ -860,29 +839,38 @@ if has_pose and self.current_state.connected:
 
 **启动文件：** `run_servo_test.launch`
 
-**功能：** 通过 MAVLink `MAV_CMD_DO_SET_SERVO` 指令直接控制飞控舵机输出引脚（SERVO5），不经过飞控逻辑（无需设置 SERVOx_FUNCTION）。单舵机联动双抛投器：PWM 1000 = 全关，1500 = 仅第一个开，2000 = 全开。
+**功能：** 通过 MAVLink `MAV_CMD_DO_SET_SERVO` 指令直接控制飞控舵机输出引脚，不经过飞控逻辑（无需设置 `SERVOx_FUNCTION`）。当前脚本按**前/后两个独立舵机**工作：
+
+- 前舵机：`SERVO5`
+- 后舵机：`SERVO6`
+- `pwm_close=1000`：关闭
+- `pwm_open=1500`：打开
+
+`on/off` 会同时控制 CH5 和 CH6；`front ...` / `rear ...` 可单独控制。
 
 **飞控参数要求：** `SERVO5_FUNCTION` / `SERVO6_FUNCTION` 保持 **0 (Disabled)**，飞控不碰这个引脚。`RC_OVERRIDE_TIME` 必须 > 0（默认 3 即可），设成 0 会拒绝所有外部指令。
 
 **测试什么：** 验证舵机接线是否正确、PWM 值是否能驱动抛投器、机械结构是否顺畅。**不需要飞机起飞，地上就能测。**
 
 **启动后你可以：**
-- 在终端输入 `on` → 舵机转到 PWM 2000，两个抛投器都打开
+- 在终端输入 `on` → 前后舵机都转到 `pwm_open`（默认 1500）
 - 在终端输入 `off` → 舵机转到 PWM 1000，两个抛投器都关闭
+- 输入 `front open/off`、`rear open/off` → 单独控制前/后舵机
+- 输入 `status` → 刷新飞控连接状态
 - 输入 `q` 退出
 - 也可以通过 ROS 话题远程控制（见下方）
 
 **启动命令：**
 
 ```bash
-# ① 默认：只控制 CH5（一个舵机驱动两侧抛投器）
+# ① 默认：CH5 和 CH6 都启用
 roslaunch cuadc_vision run_servo_test.launch
 # 启动后终端显示 "servo>" 提示符，输入 on/off 控制
 ```
 
 ```bash
-# ② 双通道独立控制（CH5 左 + CH6 右）
-roslaunch cuadc_vision run_servo_test.launch enable_ch6:=true
+# ② 只测前舵机（禁用 CH6）
+roslaunch cuadc_vision run_servo_test.launch enable_ch6:=false
 ```
 
 ```bash
@@ -894,7 +882,7 @@ rostopic pub /servo/cmd std_msgs/String "data: 'on'"
 rostopic pub /servo/cmd std_msgs/String "data: 'off'"
 ```
 
-**验证是否正常：** 输入 `on` 后舵机应转动并保持，终端打印 `舵机 CH5 → 打开 (PWM=1400)`。舵机不动则检查飞控是否上电、通道映射是否正确。
+**验证是否正常：** 输入 `on` 后舵机应转动并保持，终端会打印类似 `舵机 前舵机(CH5) → 打开 (PWM=1500)`、`舵机 后舵机(CH6) → 打开 (PWM=1500)`。舵机不动则检查飞控是否上电、MAVROS 是否连通、通道映射是否正确。
 
 ---
 

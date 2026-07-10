@@ -20,7 +20,6 @@ detector_node:
   conf_threshold: 0.5
   imgsz: 640
   device: "cpu"
-  invert_camera_x: true
   depth_patch_radius: 2
 
 # ---- geopose_node ----

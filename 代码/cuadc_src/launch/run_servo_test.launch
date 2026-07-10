@@ -4,25 +4,26 @@
 
     功能：
       启动 servo_test.py 节点，打开一个终端，通过手动输入 on/off
-      或通过 ROS 话题 /servo/cmd、/servo/open 控制飞控 CH5/CH6 舵机。
+      或 front/rear 指令，或通过 ROS 话题 /servo/cmd、/servo/open
+      控制飞控 CH5/CH6 舵机。
 
     通道配置：
-      - CH5 默认启用（抛投器 1）
-      - CH6 默认禁用（抛投器 2，如需独立控制两个抛投器请设为 true）
+      - CH5 默认启用（前舵机）
+      - CH6 默认启用（后舵机）
 
-    PWM 配置（单舵机双抛投器）：
-      - 全关 (off): 1000 μs → 两个抛投器都关闭
-      - 全开 (on):  2000 μs → 两个抛投器都打开
-      - 半开:       1500 μs → 仅第一个打开
+    PWM 配置（前后两个独立舵机）：
+      - 关闭 (off): 1000 μs
+      - 打开 (on):  1500 μs
 
     运行方式：
       roslaunch cuadc_vision run_servo_test.launch
-      roslaunch cuadc_vision run_servo_test.launch enable_ch6:=true
       roslaunch cuadc_vision run_servo_test.launch pwm_open:=1500 pwm_close:=1000
 
     ROS 话题控制（运行时）：
       rostopic pub /servo/cmd std_msgs/String "data: 'on'"
       rostopic pub /servo/cmd std_msgs/String "data: 'off'"
+      rostopic pub /servo/cmd std_msgs/String "data: 'front open'"
+      rostopic pub /servo/cmd std_msgs/String "data: 'rear off'"
       rostopic pub /servo/open std_msgs/Bool "data: true"
       rostopic pub /servo/open std_msgs/Bool "data: false"
   -->
@@ -33,8 +34,8 @@
 
   <!-- ==================== 舵机参数 ==================== -->
   <arg name="enable_ch5" default="true" />
-  <arg name="enable_ch6" default="false" />
-  <arg name="pwm_open" default="2000" />
+  <arg name="enable_ch6" default="true" />
+  <arg name="pwm_open" default="1500" />
   <arg name="pwm_close" default="1000" />
 
   <!-- ==================== 自动启动 MAVROS ==================== -->
