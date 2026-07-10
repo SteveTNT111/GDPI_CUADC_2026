@@ -1,0 +1,57 @@
+<launch>
+  <!--
+    run_servo_test.launch — CUADC 2026 舵机测试启动文件
+
+    功能：
+      启动 servo_test.py 节点，打开一个终端，通过手动输入 on/off
+      或通过 ROS 话题 /servo/cmd、/servo/open 控制飞控 CH5/CH6 舵机。
+
+    通道配置：
+      - CH5 默认启用（抛投器 1）
+      - CH6 默认禁用（抛投器 2，如需独立控制两个抛投器请设为 true）
+
+    PWM 配置（单舵机双抛投器）：
+      - 全关 (off): 1000 μs → 两个抛投器都关闭
+      - 全开 (on):  2000 μs → 两个抛投器都打开
+      - 半开:       1500 μs → 仅第一个打开
+
+    运行方式：
+      roslaunch cuadc_vision run_servo_test.launch
+      roslaunch cuadc_vision run_servo_test.launch enable_ch6:=true
+      roslaunch cuadc_vision run_servo_test.launch pwm_open:=1500 pwm_close:=1000
+
+    ROS 话题控制（运行时）：
+      rostopic pub /servo/cmd std_msgs/String "data: 'on'"
+      rostopic pub /servo/cmd std_msgs/String "data: 'off'"
+      rostopic pub /servo/open std_msgs/Bool "data: true"
+      rostopic pub /servo/open std_msgs/Bool "data: false"
+  -->
+
+  <!-- ==================== MAVROS 参数 ==================== -->
+  <arg name="fcu_url" default="/dev/ttyACM0:921600" />
+  <arg name="auto_start_mavros" default="true" />
+
+  <!-- ==================== 舵机参数 ==================== -->
+  <arg name="enable_ch5" default="true" />
+  <arg name="enable_ch6" default="false" />
+  <arg name="pwm_open" default="2000" />
+  <arg name="pwm_close" default="1000" />
+
+  <!-- ==================== 自动启动 MAVROS ==================== -->
+  <include if="$(arg auto_start_mavros)"
+           file="$(find mavros)/launch/apm.launch">
+    <arg name="fcu_url" value="$(arg fcu_url)" />
+  </include>
+
+  <!-- ==================== 舵机控制节点 ==================== -->
+  <node pkg="cuadc_vision"
+        type="servo_test.py"
+        name="servo_controller"
+        output="screen"
+        launch-prefix="xterm -e">
+    <param name="enable_ch5" value="$(arg enable_ch5)" />
+    <param name="enable_ch6" value="$(arg enable_ch6)" />
+    <param name="pwm_open" value="$(arg pwm_open)" />
+    <param name="pwm_close" value="$(arg pwm_close)" />
+  </node>
+</launch>

@@ -1,0 +1,34 @@
+# CUADC Vision 参数
+
+# ---- camera_node ----
+camera_node:
+  color_width: 640
+  color_height: 480
+  depth_width: 640
+  depth_height: 480
+  fps: 30
+  color_format: "bgr8"
+  auto_profile_fallback: true
+  align_depth_to_color: true
+  wait_timeout_ms: 5000
+  timeout_restart_count: 3
+  frame_id: "d435i_color_optical_frame"
+
+# ---- detector_node ----
+detector_node:
+  model_path: "models/best.onnx"
+  conf_threshold: 0.6
+  imgsz: 640
+  device: "cpu"
+  invert_camera_x: true
+  depth_patch_radius: 2
+
+# ---- geopose_node ----
+geopose_node:
+  global_position_topic: "/mavros/global_position/global"
+  local_pose_topic: "/mavros/local_position/pose"
+  body_frame: "base_link"
+  camera_frame: "d435i_color_optical_frame"
+  min_confidence: 0.30
+  transform_timeout_sec: 0.10
+  publish_invalid: true
