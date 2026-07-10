@@ -176,6 +176,8 @@ class FlightController:
         # ---------- 舵机 ----------
         self.front_servo_channel = int(rospy.get_param("~front_servo_channel", 5))
         self.rear_servo_channel = int(rospy.get_param("~rear_servo_channel", 6))
+        self.servo_a_label = "A舵机(前)"
+        self.servo_b_label = "B舵机(后)"
         self.pwm_open = rospy.get_param("~pwm_open", 1500)
         self.pwm_close = rospy.get_param("~pwm_close", 1000)
         self.servo_hold_s = rospy.get_param("~servo_hold_s", 0.8)
@@ -265,23 +267,23 @@ class FlightController:
     def _servo_cmd_cb(self, msg):
         """外部舵机指令回调（兼容 servo_test 的话题接口）"""
         cmd = " ".join(msg.data.strip().lower().split())
-        if cmd in ("on", "open", "1", "true"):
+        if cmd in ("qdfs", "all on", "all open", "on", "open", "1", "true"):
             self._set_servo(True)
-        elif cmd in ("off", "close", "0", "false"):
+        elif cmd in ("all off", "off", "close", "0", "false"):
             self._set_servo(False)
         elif cmd == "toggle":
             self._set_servo(not self.servo_open)
-        elif cmd.startswith(("front ", "ch5 ", "5 ", "a ")):
+        elif cmd.startswith(("a ", "ch5 ", "5 ", "front ")):
             self._handle_target_servo_command(
                 cmd.split(" ", 1)[1],
                 self.front_servo_channel,
-                "前舵机",
+                self.servo_a_label,
             )
-        elif cmd.startswith(("rear ", "ch6 ", "6 ", "b ")):
+        elif cmd.startswith(("b ", "ch6 ", "6 ", "rear ")):
             self._handle_target_servo_command(
                 cmd.split(" ", 1)[1],
                 self.rear_servo_channel,
-                "后舵机",
+                self.servo_b_label,
             )
 
     def _handle_target_servo_command(self, action, servo_num, label):
@@ -430,8 +432,8 @@ class FlightController:
         """同时设置前后两个舵机的开关状态。"""
         return self._set_servo_targets(
             (
-                (self.front_servo_channel, "前舵机"),
-                (self.rear_servo_channel, "后舵机"),
+                (self.front_servo_channel, self.servo_a_label),
+                (self.rear_servo_channel, self.servo_b_label),
             ),
             state,
         )
@@ -566,11 +568,11 @@ class FlightController:
         if self.ammo_a > 0:
             dropper = "A"
             servo_num = self.front_servo_channel
-            servo_label = "前舵机"
+            servo_label = self.servo_a_label
         elif self.ammo_b > 0:
             dropper = "B"
             servo_num = self.rear_servo_channel
-            servo_label = "后舵机"
+            servo_label = self.servo_b_label
         else:
             rospy.logwarn("弹药耗尽，无法抛投！")
             return
