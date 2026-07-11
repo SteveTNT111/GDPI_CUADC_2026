@@ -365,7 +365,7 @@ sim_vehicle.py -v ArduCopter -f gazebo-iris --model JSON --map --console
 
 - ArduPilot Gazebo legacy 文档：<https://ardupilot.org/dev/docs/sitl-with-gazebo-legacy.html>
 - ArduPilot 新版 Gazebo 文档：<https://ardupilot.org/dev/docs/sitl-with-gazebo.html>
-- 新版官方插件：<https://github.com/ArduPilot/ardupilot_gazebo>
+- 新版官方插件：<https://github.com/ArduPilot/ardwoxianupilot_gazebo>
 - Gazebo Classic legacy 插件：<https://github.com/khancyr/ardupilot_gazebo>
 
 ## 10. 日常操作手册
