@@ -16,11 +16,26 @@ camera_node:
 
 # ---- detector_node ----
 detector_node:
+  # 模型（支持 .pt 或 .onnx）
   model_path: "models/best.pt"
   conf_threshold: 0.5
   imgsz: 640
   device: "cpu"
+  # 坐标
+  invert_camera_x: true
+  # 深度
   depth_patch_radius: 2
+  # 显示
+  show_window: false
+  warmup: true
+  cv_threads: 1
+  # 类别过滤（关键词，逗号分隔）
+  target_classes: "cylinder,tong,barrel,can,yuantong,white_cylinder,tube,drum,bucket"
+  # 类别名覆盖（逗号分隔，按 class_id 顺序）
+  class_names: ""
+  # 飞控 MAVROS
+  auto_start_mavros: true
+  mavros_fcu_url: "/dev/ttyACM0:921600"
 
 # ---- geopose_node ----
 geopose_node:

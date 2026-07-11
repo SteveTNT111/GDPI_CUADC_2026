@@ -2,38 +2,61 @@
 # -*- coding: utf-8 -*-
 
 """
-detector_node.py — CUADC 2026 YOLO 目标检测节点
+detector_node.py — CUADC 2026 YOLO 目标检测节点（全功能版）
 
 功能：
-  1. 订阅相机图像话题，加载 YOLOv8 模型逐帧推理
-  2. 按类别关键词过滤（只保留圆筒相关目标）
-  3. 查深度图获取目标距离，反投影为相机系 3D 坐标
-  4. 发布检测结果 + 标注画面
-  5. 可选弹出 OpenCV 窗口实时显示
+  1. 自动检测并启动 roscore / MAVROS（如未运行）
+  2. 订阅相机图像话题，加载 YOLOv8 模型逐帧推理（支持 .pt 和 .onnx）
+  3. 按类别关键词过滤（只保留圆筒相关目标）
+  4. 查深度图获取目标距离，反投影为相机系 3D 坐标
+  5. 读取 MAVROS 飞控数据（连接状态、电压、卫星数、RTK GPS、Z 高度）
+  6. 监听 main.py 任务状态（弹药余量、瞄准、抛投事件）
+  7. 发布检测结果 + 飞控数据 + 标注画面
+  8. 可选弹出 OpenCV 窗口实时显示（含飞控状态面板 + 弹药面板）
 
 订阅话题：
   - 彩色图像 (sensor_msgs/Image)
   - 对齐深度图 (sensor_msgs/Image)
   - 相机内参 (sensor_msgs/CameraInfo)
+  - 飞控状态 (mavros_msgs/State)
+  - 电池状态 (sensor_msgs/BatteryState)
+  - GPS 原始数据 (mavros_msgs/GPSRAW) — 卫星数 + RTK 状态
+  - GPS 全局位置 (sensor_msgs/NavSatFix) — 厘米级大地坐标
+  - 本地位置 (geometry_msgs/PoseStamped) — Z 高度
+  - 任务状态 (cuadc_vision/MissionStatus) — 弹药 + 瞄准 + 抛投
 
 发布话题：
   - /vision/yolo/detection  (YoloDetection) — 最高置信度目标
   - /vision/yolo/detections (YoloDetections) — 全部目标
-  - /vision/annotated_image  (sensor_msgs/Image) — 标注画面
+  - /vision/bucket/info     (BucketInfo) — 目标数量 + 像素偏差
+  - /vision/annotated_image (sensor_msgs/Image) — 标注画面
 """
 
 import math
 import os
+import subprocess
+import sys
 import threading
+import time
 
 import cv2
 import numpy as np
 import rospy
 import rospkg
 from cv_bridge import CvBridge
-from sensor_msgs.msg import CameraInfo, Image
+from geometry_msgs.msg import PoseStamped
+from sensor_msgs.msg import BatteryState, CameraInfo, Image, NavSatFix
 
-from cuadc_vision.msg import YoloDetection, YoloDetections, BucketInfo
+from cuadc_vision.msg import YoloDetection, YoloDetections, BucketInfo, MissionStatus
+
+# MAVROS 消息类型 — 可选依赖，导入失败时不阻塞
+try:
+    from mavros_msgs.msg import GPSRAW, State
+    _HAS_MAVROS_MSGS = True
+except ImportError:
+    GPSRAW = None   # type: ignore
+    State = None    # type: ignore
+    _HAS_MAVROS_MSGS = False
 
 
 def get_bool_param(name, default):
@@ -46,8 +69,106 @@ def get_bool_param(name, default):
     return bool(value)
 
 
+# ========================================================================
+#  环境自检与自动启动 (roscore / MAVROS)
+# ========================================================================
+
+def _ros_master_is_alive():
+    """检查 ROS master 是否可达"""
+    try:
+        import xmlrpc.client
+        master_uri = os.environ.get('ROS_MASTER_URI', 'http://localhost:11311')
+        master = xmlrpc.client.ServerProxy(master_uri)
+        master.getPid('/detector_startup_check')
+        return True
+    except Exception:
+        return False
+
+
+def _start_roscore():
+    """后台启动 roscore"""
+    print("[auto-start] 正在启动 roscore ...")
+    try:
+        subprocess.Popen(
+            ['roscore'],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception as exc:
+        print("[auto-start] 启动 roscore 失败: {}".format(exc))
+        sys.exit(1)
+
+
+def _wait_for_ros_master(timeout=30):
+    """等待 ROS master 上线，返回是否成功"""
+    waited = 0.0
+    while not _ros_master_is_alive():
+        if waited >= timeout:
+            return False
+        time.sleep(1.0)
+        waited += 1.0
+    return True
+
+
+def _mavros_is_alive():
+    """检查 MAVROS 是否在运行（通过检查 /mavros/state 话题是否存在）"""
+    try:
+        return any(t[0] == '/mavros/state' for t in rospy.get_published_topics())
+    except Exception:
+        return False
+
+
+def _wait_for_mavros(timeout=30):
+    """等待 MAVROS 上线，返回是否成功"""
+    waited = 0.0
+    while not _mavros_is_alive():
+        if waited >= timeout:
+            return False
+        time.sleep(1.0)
+        waited += 1.0
+    return True
+
+
+def _ensure_roscore():
+    """确保 roscore 在运行，如果不在则自动启动"""
+    if _ros_master_is_alive():
+        return
+    print("[auto-start] ROS master 未运行，自动启动 roscore ...")
+    _start_roscore()
+    if not _wait_for_ros_master():
+        print("[auto-start] 错误：roscore 启动超时（30s），请手动检查")
+        sys.exit(1)
+    print("[auto-start] roscore 已就绪")
+
+
+def _ensure_mavros(fcu_url):
+    """确保 MAVROS 在运行，如果不在则自动启动"""
+    if _mavros_is_alive():
+        rospy.loginfo("[auto-start] MAVROS 已在运行")
+        return
+    rospy.loginfo("[auto-start] MAVROS 未运行，自动启动 mavros apm.launch ...")
+    try:
+        subprocess.Popen(
+            ['roslaunch', 'mavros', 'apm.launch',
+             'fcu_url:={}'.format(fcu_url)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception as exc:
+        rospy.logerr("[auto-start] 启动 MAVROS 失败: %s", exc)
+        return
+    if _wait_for_mavros():
+        rospy.loginfo("[auto-start] MAVROS 已就绪")
+    else:
+        rospy.logwarn("[auto-start] MAVROS 启动超时（30s），飞控数据将不可用")
+
+
+# ========================================================================
+#  DetectorNode
+# ========================================================================
+
 class DetectorNode:
-    """YOLO 目标检测 ROS 节点"""
+    """YOLO 目标检测 ROS 节点（全功能版）"""
 
     # ========================================================================
     # 初始化
@@ -55,10 +176,10 @@ class DetectorNode:
 
     def __init__(self):
         # ---------- 模型参数 ----------
-        # 默认从包内 models/ 目录找 best.onnx
-        _default_model = os.path.join(rospkg.RosPack().get_path('cuadc_vision'), 'models', 'best.onnx')
+        # 默认从包内 models/ 目录找 best.pt（也支持 .onnx）
+        _default_model = os.path.join(rospkg.RosPack().get_path('cuadc_vision'), 'models', 'best.pt')
         self.model_path = os.path.expanduser(rospy.get_param("~model_path", _default_model))
-        self.conf_threshold = float(rospy.get_param("~conf_threshold", 0.6))
+        self.conf_threshold = float(rospy.get_param("~conf_threshold", 0.5))
         self.imgsz = int(rospy.get_param("~imgsz", 640))
         self.imgsz_explicit = rospy.has_param("~imgsz")
         self.device = rospy.get_param("~device", "cpu")
@@ -87,6 +208,15 @@ class DetectorNode:
         )
         self.target_classes = [c.strip().lower() for c in target_str.split(",") if c.strip()]
 
+        # ---------- 飞控 MAVROS ----------
+        self.auto_start_mavros = get_bool_param("~auto_start_mavros", True)
+        self.mavros_fcu_url = rospy.get_param("~mavros_fcu_url", "/dev/ttyACM0:921600")
+        self.fc_state_topic = rospy.get_param("~fc_state_topic", "/mavros/state")
+        self.fc_battery_topic = rospy.get_param("~fc_battery_topic", "/mavros/battery")
+        self.fc_gps_topic = rospy.get_param("~fc_gps_topic", "/mavros/global_position/global")
+        self.fc_gpsraw_topic = rospy.get_param("~fc_gpsraw_topic", "/mavros/gpsstatus/gps1/raw")
+        self.fc_local_pose_topic = rospy.get_param("~fc_local_pose_topic", "/mavros/local_position/pose")
+
         # ---------- ROS 话题名 ----------
         color_topic = rospy.get_param("~color_topic", "/vision/color/image_raw")
         depth_topic = rospy.get_param("~depth_topic", "/vision/aligned_depth/image_raw")
@@ -112,6 +242,7 @@ class DetectorNode:
             rospy.signal_shutdown("ultralytics not installed")
             return
 
+        # ONNX 模型：检查 onnxruntime + 同步输入尺寸
         if self.model_ext == ".onnx":
             try:
                 import onnxruntime  # noqa: F401
@@ -144,6 +275,28 @@ class DetectorNode:
         self.camera_info_lock = threading.Lock()
         self.latest_depth = None          # 最新深度图 (H×W float32, 单位 m)
         self.latest_camera_info = None    # 最新相机内参 (CameraInfo)
+
+        # ---- 飞控数据容器 ----
+        self.fc_lock = threading.Lock()
+        self.fc_connected = False         # 飞控是否连接
+        self.fc_armed = False             # 是否解锁
+        self.fc_mode = "N/A"              # 飞行模式
+        self.fc_voltage = 0.0             # 电池电压 (V)
+        self.fc_satellites = 0            # 卫星数
+        self.fc_fix_type = 0              # GPS 定位类型 (0=无, 6=RTK Fixed)
+        self.fc_lat = 0.0                 # 纬度 (度)
+        self.fc_lon = 0.0                 # 经度 (度)
+        self.fc_alt = 0.0                 # GPS 海拔 (m)
+        self.fc_rel_z = 0.0               # 本地 Z 高度 (m) — NED 坐标系，Z 向下为负
+        self._has_fc_data = False         # 是否收到过飞控数据
+
+        # ---- 任务状态（来自 main.py）----
+        self.mission_lock = threading.Lock()
+        self.mission_ammo_a = 0
+        self.mission_ammo_b = 0
+        self.mission_aiming = False
+        self._drop_display_until = 0.0   # 抛投文字显示截止时间
+        self._drop_display_label = ""    # 当前显示的抛投标签 ("A" / "B")
 
         # FPS 计时
         self._fps_t0 = rospy.Time.now()
@@ -178,10 +331,24 @@ class DetectorNode:
             self.camera_info_callback, queue_size=1
         )
 
-        rospy.loginfo("Detector started. model=%s conf=%.2f imgsz=%s device=%s cv_threads=%d omp_threads=%s",
-                       self.model_path, self.conf_threshold, str(self.imgsz), self.device,
-                       self.cv_threads, os.environ.get("OMP_NUM_THREADS", "default"))
+        # ---- 飞控 MAVROS 订阅（可选，失败时静默跳过）----
+        self._init_fc_subscribers()
+
+        # ---- 任务状态订阅（来自 main.py）----
+        self.mission_sub = rospy.Subscriber(
+            "/vision/mission_status", MissionStatus, self._mission_cb, queue_size=5
+        )
+
+        rospy.loginfo("Detector started. model=%s ext=%s conf=%.2f imgsz=%s device=%s",
+                       self.model_path, self.model_ext, self.conf_threshold,
+                       str(self.imgsz), self.device)
         rospy.loginfo("Detector class names: %s", self.class_name_map)
+        if self._has_fc_data:
+            rospy.loginfo("FC data available: state=%s battery=%s gps=%s gpsraw=%s local_pose=%s",
+                          self.fc_state_topic, self.fc_battery_topic,
+                          self.fc_gps_topic, self.fc_gpsraw_topic, self.fc_local_pose_topic)
+        else:
+            rospy.loginfo("FC data NOT available (MAVROS not running or mavros_msgs not installed)")
 
     def _sync_imgsz_with_onnx_input(self):
         """Read ONNX input shape and force imgsz to match static models."""
@@ -238,6 +405,32 @@ class DetectorNode:
             for idx, name in enumerate(self.class_name_overrides):
                 self.class_name_map[idx] = name
 
+    def _init_fc_subscribers(self):
+        """初始化飞控数据订阅（容错：任一 topic 不可用不影响整体）"""
+        if not _HAS_MAVROS_MSGS:
+            rospy.loginfo("mavros_msgs not installed, skipping FC data subscriptions")
+            return
+        try:
+            self.fc_state_sub = rospy.Subscriber(
+                self.fc_state_topic, State, self.fc_state_cb, queue_size=1
+            )
+            self.fc_battery_sub = rospy.Subscriber(
+                self.fc_battery_topic, BatteryState, self.fc_battery_cb, queue_size=1
+            )
+            self.fc_gpsraw_sub = rospy.Subscriber(
+                self.fc_gpsraw_topic, GPSRAW, self.fc_gpsraw_cb, queue_size=1
+            )
+            self.fc_gps_sub = rospy.Subscriber(
+                self.fc_gps_topic, NavSatFix, self.fc_gps_cb, queue_size=1
+            )
+            self.fc_local_pose_sub = rospy.Subscriber(
+                self.fc_local_pose_topic, PoseStamped, self.fc_local_pose_cb, queue_size=1
+            )
+            self._has_fc_data = True
+        except Exception as exc:
+            rospy.logwarn("FC subscriber init failed: %s. FC data will be N/A.", exc)
+            self._has_fc_data = False
+
     @staticmethod
     def _make_img_msg(array, encoding):
         """Construct sensor_msgs/Image directly to avoid cv_bridge bgr8 KeyError."""
@@ -269,6 +462,55 @@ class DetectorNode:
         """存储最新相机内参（线程安全）"""
         with self.camera_info_lock:
             self.latest_camera_info = msg
+
+    # ========================================================================
+    # 飞控 MAVROS 回调
+    # ========================================================================
+
+    def fc_state_cb(self, msg):
+        """飞控状态回调"""
+        with self.fc_lock:
+            self.fc_connected = getattr(msg, 'connected', False)
+            self.fc_armed = getattr(msg, 'armed', False)
+            self.fc_mode = getattr(msg, 'mode', 'N/A')
+
+    def fc_battery_cb(self, msg):
+        """电池状态回调"""
+        with self.fc_lock:
+            self.fc_voltage = getattr(msg, 'voltage', 0.0)
+
+    def fc_gpsraw_cb(self, msg):
+        """GPS 原始数据回调（卫星数 + RTK 定位类型）"""
+        with self.fc_lock:
+            self.fc_satellites = getattr(msg, 'satellites_visible', 0)
+            self.fc_fix_type = getattr(msg, 'fix_type', 0)
+
+    def fc_gps_cb(self, msg):
+        """GPS 全局位置回调（RTK 厘米级大地坐标）"""
+        with self.fc_lock:
+            self.fc_lat = getattr(msg, 'latitude', 0.0)
+            self.fc_lon = getattr(msg, 'longitude', 0.0)
+            self.fc_alt = getattr(msg, 'altitude', 0.0)
+
+    def fc_local_pose_cb(self, msg):
+        """本地位置回调（Z 高度 — NED 坐标系）"""
+        with self.fc_lock:
+            self.fc_rel_z = getattr(msg.pose.position, 'z', 0.0)
+
+    def _mission_cb(self, msg):
+        """任务状态回调（来自 main.py）"""
+        with self.mission_lock:
+            self.mission_ammo_a = msg.ammo_a
+            self.mission_ammo_b = msg.ammo_b
+            self.mission_aiming = msg.aiming
+            if msg.last_drop:
+                # 新的抛投事件 → 记录 3 秒显示
+                self._drop_display_label = msg.last_drop
+                self._drop_display_until = time.time() + 3.0
+            elif not msg.last_drop:
+                # 抛投事件结束
+                if time.time() >= self._drop_display_until:
+                    self._drop_display_label = ""
 
     # ========================================================================
     # 核心：图像回调 —— 整个检测流程的入口
@@ -330,17 +572,22 @@ class DetectorNode:
         if best is not None:
             self.draw_overlay(annotated, best)
 
-        # 4d. 左下角面板：帧摘要（不重复框旁边的信息）
+        # 4c2. 任务状态叠加文字 (AIMING!! / DROP!!!)
+        self._draw_mission_overlay(annotated, w, h)
+
+        # 4d. 左下角面板：检测摘要 + 飞控状态
         n_dets = len(detections_msg.detections)
+        fc_lines = self._format_fc_lines()
         panel = [
             "detected: {}  FPS {:.1f}".format(n_dets, self._fps_display),
+        ] + fc_lines + [
             "model: {}  device: {}".format(
                 os.path.basename(self.model_path), self.device
             ),
         ]
-        self.draw_panel(annotated, panel, frame.shape[1], frame.shape[0])
+        self.draw_panel(annotated, panel, w, h)
 
-        # 4d. 左上角显示帧率
+        # 4e. 左上角显示帧率
         self._fps_counter += 1
         now = rospy.Time.now()
         dt = (now - self._fps_t0).to_sec()
@@ -615,7 +862,7 @@ class DetectorNode:
         if det.position_valid:
             # 第 2 行：水平 + 垂直偏移（相机系，带方向箭头）
             self.draw_text_bg(
-                image, "x→{:+.2f}  y↑{:+.2f}m".format(det.camera_x_m, det.camera_y_m),
+                image, "x{:+.2f}  y{:+.2f}m".format(det.camera_x_m, det.camera_y_m),
                 bx, by + line_h, font_scale=font_scale, text_color=text_color
             )
             # 第 3 行：深度 + 直线距离
@@ -737,10 +984,143 @@ class DetectorNode:
             text_color, thickness, cv2.LINE_AA
         )
 
+    # ========================================================================
+    #  任务状态叠加文字 (AIMING!! / DROP!!!)
+    # ========================================================================
+
+    def _draw_mission_overlay(self, image, img_w, img_h):
+        """在画面中下区域叠加 AIMING!! 闪烁或 DROP!!! 文字"""
+        now = time.time()
+
+        with self.mission_lock:
+            aiming = self.mission_aiming
+        drop_label = self._drop_display_label
+        drop_active = drop_label and now < self._drop_display_until
+
+        if drop_active:
+            # 抛投显示：大号红色闪烁文字
+            text = "{} DROP!!!".format(drop_label)
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            fs = 1.6
+            thickness = 3
+            color = (0, 0, 255)  # 红色
+        elif aiming:
+            # 瞄准显示：闪烁效果（0.5 Hz toggle）
+            if int(now * 2) % 2 == 0:
+                text = "AIMING!!"
+            else:
+                text = ""
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            fs = 1.3
+            thickness = 3
+            color = (0, 255, 255)  # 黄色
+        else:
+            return
+
+        if not text:
+            return
+
+        # 居中在中下区域（画面中心偏下 60px）
+        (tw, th), baseline = cv2.getTextSize(text, font, fs, thickness)
+        cx = (img_w - tw) // 2
+        cy = img_h // 2 + 60
+
+        # 黑底背景
+        pad = 8
+        cv2.rectangle(
+            image,
+            (cx - pad, cy - th - pad),
+            (cx + tw + pad, cy + baseline + pad),
+            (0, 0, 0), -1,
+        )
+        cv2.putText(
+            image, text, (cx, cy), font, fs,
+            color, thickness, cv2.LINE_AA,
+        )
+
+    # ========================================================================
+    #  飞控状态格式化
+    # ========================================================================
+
+    @staticmethod
+    def _gps_fix_name(fix_type):
+        """GPS 定位类型 → 可读字符串"""
+        names = {
+            0: "NoGPS", 1: "NoFix", 2: "2D", 3: "3D",
+            4: "DGPS", 5: "RTK Float", 6: "RTK Fixed", 7: "Static", 8: "PPP",
+        }
+        return names.get(fix_type, "?{}".format(fix_type))
+
+    def _format_fc_lines(self):
+        """构建左下角面板中的飞控状态文本行"""
+        with self.fc_lock:
+            connected = self.fc_connected
+            armed = self.fc_armed
+            mode = self.fc_mode
+            voltage = self.fc_voltage
+            satellites = self.fc_satellites
+            fix_type = self.fc_fix_type
+            lat = self.fc_lat
+            lon = self.fc_lon
+            alt = self.fc_alt
+            rel_z = self.fc_rel_z
+
+        with self.mission_lock:
+            ammo_a = self.mission_ammo_a
+            ammo_b = self.mission_ammo_b
+
+        # 弹药行
+        ammo_a_str = str(ammo_a) if ammo_a > 0 else "N/A"
+        ammo_b_str = str(ammo_b) if ammo_b > 0 else "N/A"
+        ammo_line = "AMMO: A-{}  B-{}".format(ammo_a_str, ammo_b_str)
+
+        if not self._has_fc_data or not connected:
+            # 飞控未连接：显示简化信息
+            return [
+                "FC: disconnected",
+                ammo_line,
+            ]
+
+        # 飞控已连接：显示完整信息
+        arm_str = "ARM" if armed else "DISARM"
+        fix_str = self._gps_fix_name(fix_type)
+
+        lines = [
+            "FC: connected  {}  {}".format(mode, arm_str),
+        ]
+
+        # Z 高度行（本地坐标系）
+        lines.append("Z: {:.2f} m".format(rel_z))
+
+        # 电压 + 卫星数 + RTK 状态
+        if voltage > 0.0:
+            lines.append(
+                "Bat: {:.1f}V  Sat: {}  {}".format(voltage, satellites, fix_str)
+            )
+        else:
+            lines.append("Sat: {}  {}".format(satellites, fix_str))
+
+        # GPS 厘米级大地坐标
+        if lat != 0.0 or lon != 0.0:
+            lines.append(
+                "GPS: {:.7f}  {:.7f}  {:.2f}m".format(lat, lon, alt)
+            )
+        else:
+            lines.append("GPS: waiting for fix...")
+
+        # 弹药
+        lines.append(ammo_line)
+
+        return lines
+
+    # ========================================================================
+    #  面板绘制
+    # ========================================================================
+
     def draw_panel(self, image, lines, img_w, img_h):
         """
         在画面左下角画一个固定位置的信息面板。
-        位置固定 —— 用于始终显示最佳目标摘要（"Best: cylinder conf=0.85..."）。
+        位置固定 —— 用于始终显示检测摘要、飞控状态、弹药信息。
         不管检测框在哪，面板始终在左下角。
         """
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -775,8 +1155,24 @@ class DetectorNode:
 # ========================================================================
 
 def main():
+    # ---- 第 0 步：环境自检 ----
+    # 如果通过 roslaunch 启动，roscore 已在运行。
+    # 如果直接 python3 启动，自动检测并启动 roscore。
+    _ensure_roscore()
+
+    # ---- 第 1 步：初始化节点 ----
     rospy.init_node("detector_node")
+
+    # ---- 第 2 步：按需启动 MAVROS ----
+    auto_start = get_bool_param("~auto_start_mavros", True)
+    if auto_start:
+        fcu_url = rospy.get_param("~mavros_fcu_url", "/dev/ttyACM0:921600")
+        _ensure_mavros(fcu_url)
+
+    # ---- 第 3 步：创建检测节点 ----
     DetectorNode()
+
+    # ---- 第 4 步：事件循环 ----
     rospy.spin()
 
 
