@@ -2,21 +2,84 @@
 
 本目录是从 `代码/NUC上面的测试功能包（不可以随便修改,可以复制里面的内容）` 复制出来的比赛工作版本。原 NUC 测试功能包未修改。
 
-## 新增/修改文件
+## 文件夹结构和新增位置
 
+> 对照原版 NUC 测试功能包：原版的 `cuadc_control/` 在本工作版本里对应 `src/cuadc_control/`；原版的 `cuadc_src/` 在本工作版本里对应 `src/cuadc_vision/`。后续要新增或替换文件时，按下面这个路径放，不要再改原版 NUC 测试功能包。
+
+```text
+比赛main工作版本/
+├── COMPETITION_MAIN_README.md                         # 【新增】比赛 main 工作版本总说明
+├── 2026-07-16_比赛main升级工作记录.md                  # 【新增】本次升级过程/改动记录
+└── src/
+    ├── cuadc_control/                                  # 【原有】由原版 cuadc_control/ 复制过来，控制类测试脚本
+    │   ├── CMakeLists.txt                              # 【原有】cuadc_control 的 catkin 配置
+    │   ├── package.xml                                 # 【原有】cuadc_control 包信息
+    │   ├── ctrl_README.md                              # 【原有】控制包说明
+    │   ├── launch/                                     # 【原有】一键起飞/前飞/返航等 launch
+    │   └── scripts/                                    # 【原有】一键起飞/前飞/返航等控制脚本
+    └── cuadc_vision/                                   # 【原有+新增】由原版 cuadc_src/ 改到 ROS 工作区包路径
+        ├── CMakeLists.txt                              # 【修改】把新增 Python 脚本加入 catkin install
+        ├── package.xml                                 # 【原有】视觉包依赖和消息生成配置
+        ├── src_README.md                               # 【原有】视觉包原说明
+        ├── detector_node_flow.md                       # 【原有】识别节点流程说明
+        ├── config/
+        │   └── params.yaml                             # 【原有】视觉/识别参数
+        ├── launch/
+        │   ├── competition_main.launch                  # 【新增】比赛主任务启动文件
+        │   ├── single_bucket_aim_test.launch            # 【新增】单桶瞄准测试启动文件
+        │   ├── auto_drop.launch                         # 【原有】自动投放测试 launch
+        │   ├── camera_node.launch                       # 【原有】相机节点 launch
+        │   ├── detector_node.launch                     # 【原有】YOLO/桶识别节点 launch
+        │   ├── run_flight_recorder.launch               # 【原有】飞行数据记录 launch
+        │   ├── run_main.launch                          # 【原有】旧 main 启动文件
+        │   ├── run_servo_test.launch                    # 【原有】舵机测试 launch
+        │   └── video_recorder.launch                    # 【原有】视频记录 launch
+        ├── models/
+        │   └── README.txt                               # 【原有】模型放置说明
+        ├── msg/                                        # 【原有】视觉检测/任务状态消息定义
+        │   ├── BucketInfo.msg
+        │   ├── GeoTarget.msg
+        │   ├── MissionStatus.msg
+        │   ├── YoloDetection.msg
+        │   └── YoloDetections.msg
+        └── scripts/
+            ├── competition_mission_common.py            # 【新增】比赛任务通用 MAVROS/目标锁定/抛投工具
+            ├── competition_main.py                      # 【新增】比赛 main 主任务状态机入口
+            ├── single_bucket_aim_test.py                # 【新增】真机单桶瞄准测试入口
+            ├── auto_drop_node.py                        # 【原有】旧自动投放节点
+            ├── camera_node.py                           # 【原有】相机节点
+            ├── detector_node.py                         # 【原有】YOLO/桶识别节点
+            ├── flight_data_video_recorder_node.py       # 【原有】飞行数据+视频记录节点
+            ├── geopose_node.py                          # 【原有】目标地理坐标/位姿辅助节点
+            ├── main.py                                  # 【原有】旧主程序
+            ├── one_key_takeoff.py                       # 【原有】视觉包内一键起飞测试脚本
+            ├── servo_test.py                            # 【原有】舵机测试脚本
+            └── video_recorder_node.py                   # 【原有】视频记录节点
+```
+
+## 新增/修改文件功能说明
+
+- `COMPETITION_MAIN_README.md`
+  - 新增：比赛 main 工作版本总说明，写清楚目录结构、文件放置位置、启动命令、验证步骤和风险点。
+- `2026-07-16_比赛main升级工作记录.md`
+  - 新增：记录本次从 NUC 测试功能包复制、改成比赛 main 工作版本、补充主任务脚本的过程。
 - `src/cuadc_vision/scripts/competition_mission_common.py`
-  - 复用 MAVROS 的 GUIDED/ARM/TAKEOFF/RTL、local/global setpoint、`MAV_CMD_DO_SET_SERVO` 调用方式。
-  - 提供目标多帧跟踪、滑动中值锁定、A/B 弹药与抛投器补偿。
+  - 新增：比赛任务公共库，复用 MAVROS 的 GUIDED/ARM/TAKEOFF/RTL、local/global setpoint、`MAV_CMD_DO_SET_SERVO` 调用方式。
+  - 实现：目标多帧跟踪、滑动中值锁定、A/B 弹药计数、A/B 抛投器前后补偿、状态发布辅助函数。
 - `src/cuadc_vision/scripts/competition_main.py`
-  - 比赛主状态机：起飞、投放区航线搜索、多桶稳定选择、瞄准、投放、侦察、RTL。
+  - 新增：比赛主任务入口文件。
+  - 实现：起飞、投放区航线搜索、多桶稳定选择、瞄准、投放、投放后判断、侦察区观察、RTL/异常保护。
 - `src/cuadc_vision/scripts/single_bucket_aim_test.py`
-  - 真机单桶瞄准测试脚本：不自动起飞，不自动 RTL，完成后可切 LOITER。
+  - 新增：真机单桶瞄准测试脚本。
+  - 实现：不自动起飞、不自动 RTL，只测试视觉锁定、对桶瞄准、投放条件判断；完成后可切 LOITER 交给飞手接管。
 - `src/cuadc_vision/launch/competition_main.launch`
-  - 主任务启动文件，默认危险动作关闭。
+  - 新增：比赛主任务 launch。
+  - 实现：统一加载 `competition_main.py` 所需参数，默认关闭自动起飞和真实舵机投放，避免误触发危险动作。
 - `src/cuadc_vision/launch/single_bucket_aim_test.launch`
-  - 单桶瞄准测试启动文件，默认 dry-run。
+  - 新增：单桶瞄准测试 launch。
+  - 实现：统一启动单桶测试参数，默认 `dry_run:=true`，先验证瞄准逻辑再允许实投。
 - `src/cuadc_vision/CMakeLists.txt`
-  - 将新增 Python 脚本加入 catkin install。
+  - 修改：将 `competition_mission_common.py`、`competition_main.py`、`single_bucket_aim_test.py` 加入 catkin install，保证 `catkin_make` 后能被 `roslaunch` 正常找到。
 
 ## 主状态机流程
 

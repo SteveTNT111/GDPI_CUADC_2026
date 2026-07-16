@@ -1,0 +1,21 @@
+<launch>
+  <!--
+    camera_node.launch — D435i 相机驱动
+
+    功能：启动 D435i 相机，发布彩色图、深度图、相机内参。
+    配合 rviz 或 rqt_image_view 查看画面。
+
+    运行方式：
+      roslaunch cuadc_vision camera_node.launch
+      roslaunch cuadc_vision camera_node.launch fps:=15
+  -->
+
+  <arg name="fps" default="30" />
+
+  <node pkg="cuadc_vision"
+        type="camera_node.py"
+        name="camera_node"
+        output="screen">
+    <param name="fps" value="$(arg fps)" />
+  </node>
+</launch>
