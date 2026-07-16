@@ -1,0 +1,93 @@
+<launch>
+  <!--
+    runmain.launch — CUADC 2026 总启动文件
+    启动内容：
+      0. MAVROS（可选自动启动）— 飞控通信桥接
+      1. main.py        飞行主控（状态机 + 模式切换 + 起飞）
+      2. camera_node     D435i 相机驱动
+      3. detector_node   YOLO 目标检测
+      4. geopose_node    大地坐标变换（可选）
+
+    运行方式：
+      roslaunch cuadc_vision runmain.launch
+      roslaunch cuadc_vision runmain.launch auto_arm:=true auto_takeoff:=true
+      roslaunch cuadc_vision runmain.launch ground_test:=true
+      roslaunch cuadc_vision runmain.launch fcu_url:=/dev/ttyUSB0:921600
+  -->
+
+  <!-- ==================== 全局参数 ==================== -->
+  <arg name="fps" default="30" />
+  <arg name="enable_geopose" default="false" />
+  <arg name="yolo_model_path" default="$(find cuadc_vision)/models/best.pt" />
+  <arg name="yolo_device" default="cpu" />
+
+  <!-- 相机安装外参：相机在机体重心正下方，镜头朝下，相机顶部朝机体前方 -->
+  <!-- camera_mount_z: 相机光学中心到机体 CG 的竖直距离 (m)，机体 Z+ 为下，正值=在 CG 下方 -->
+  <arg name="camera_mount_z" default="0.40" />
+
+  <!-- 主控参数 -->
+  <arg name="takeoff_altitude" default="10.0" />
+  <arg name="auto_arm" default="false" />
+  <arg name="auto_takeoff" default="false" />
+  <arg name="ground_test" default="false" />
+
+  <!-- MAVROS 参数 -->
+  <arg name="fcu_url" default="/dev/ttyACM0:921600" />
+  <arg name="auto_start_mavros" default="true" />
+
+  <!-- ==================== 0. 自动启动 MAVROS ==================== -->
+  <include if="$(arg auto_start_mavros)"
+           file="$(find mavros)/launch/apm.launch">
+    <arg name="fcu_url" value="$(arg fcu_url)" />
+  </include>
+
+  <!-- ==================== 相机→机体 TF 静态变换 ==================== -->
+  <!--
+    相机安装方式：D435i 在机体重心正下方，镜头朝下，相机顶部(USB口)朝向机体前方。
+    坐标映射：X_cam(右)→Y_body(右), Y_cam(下)→-X_body(后), Z_cam(光轴)→Z_body(下)
+    旋转：绕 Z 轴 +90° (yaw=1.5708 rad)
+    平移：(0, 0, camera_mount_z) — 相机位于 CG 正下方
+  -->
+  <node pkg="tf2_ros" type="static_transform_publisher"
+        name="camera_to_body_tf"
+        args="0 0 $(arg camera_mount_z) 0 0 0.7071068 0.7071068 base_link d435i_color_optical_frame" />
+
+  <!-- ==================== 1. 飞行主控 ==================== -->
+  <node pkg="cuadc_vision"
+        type="main.py"
+        name="flight_controller"
+        output="screen"
+        required="true">
+    <param name="takeoff_altitude" value="$(arg takeoff_altitude)" />
+    <param name="auto_arm" value="$(arg auto_arm)" />
+    <param name="auto_takeoff" value="$(arg auto_takeoff)" />
+    <param name="ground_test" value="$(arg ground_test)" />
+    <param name="auto_start_mavros" value="$(arg auto_start_mavros)" />
+    <param name="mavros_fcu_url" value="$(arg fcu_url)" />
+  </node>
+
+  <!-- ==================== 2. D435i 相机 ==================== -->
+  <node pkg="cuadc_vision"
+        type="camera_node.py"
+        name="camera_node"
+        output="screen">
+    <param name="fps" value="$(arg fps)" />
+  </node>
+
+  <!-- ==================== 3. YOLO 检测 ==================== -->
+  <node pkg="cuadc_vision"
+        type="detector_node.py"
+        name="detector_node"
+        output="screen">
+    <param name="model_path" value="$(arg yolo_model_path)" />
+    <param name="device" value="$(arg yolo_device)" />
+  </node>
+
+  <!-- ==================== 4. 大地坐标变换 ==================== -->
+  <group if="$(arg enable_geopose)">
+    <node pkg="cuadc_vision"
+          type="geopose_node.py"
+          name="geopose_node"
+          output="screen" />
+  </group>
+</launch>
