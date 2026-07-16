@@ -2,7 +2,7 @@
   <arg name="takeoff_altitude" default="3.0" />
   <arg name="hover_mode" default="LOITER" />
   <arg name="auto_start_mavros" default="true" />
-  <arg name="fcu_url" default="/dev/ttyACM0:921600" />
+  <arg name="fcu_url" default="/dev/ttyACM0:115200" />
   <arg name="monitor_after_loiter" default="true" />
 
   <node pkg="cuadc_control"

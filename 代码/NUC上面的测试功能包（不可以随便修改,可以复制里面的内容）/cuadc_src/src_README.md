@@ -13,22 +13,24 @@
 
 ```
 cuadc_src/
-├── scripts/                                   # Python 节点（7个）
+├── scripts/                                   # Python 节点（9个）
 │   ├── main.py                                #   主控：状态机 + 模式切换 + 起飞
 │   ├── servo_test.py                          #   舵机测试：终端 A/B on/off 控制 CH5/CH6
 │   ├── camera_node.py                         #   D435i 相机驱动
 │   ├── detector_node.py                       #   YOLO 目标检测
-│   ├── geopose_node.py                        #   坐标变换（相机→机体→ENU→WGS84）
+│   ├── geopose_node.py                        #   坐标变换参考实现（逻辑已内联到 detector_node）
 │   ├── flight_data_video_recorder_node.py     #   飞行数据录像（解锁自动录）
-│   └── auto_drop_node.py                      #   自动抛投触发
-├── launch/                                    # 启动文件（6个，每个 .py 一个同名 launch）
+│   ├── auto_drop_node.py                      #   自动抛投触发
+│   ├── one_key_takeoff.py                     #   一键起飞 → GUIDED 解锁起飞 → LOITER 悬停
+│   └── video_recorder_node.py                 #   D435i RGB 视频录制（训练数据采集）
+├── launch/                                    # 启动文件（7个）
 │   ├── camera_node.launch                     #   D435i 相机（配合 rviz 查看画面）
 │   ├── detector_node.launch                   #   YOLO 检测（相机 + 检测 + OpenCV 窗口）
-│   ├── geopose_node.launch                    #   大地坐标变换（待创建）
-│   ├── run_main.launch                        #   总启动：主控 + 相机 + 检测 + geopose
+│   ├── run_main.launch                        #   总启动：主控 + 相机 + 检测（+ geopose 可选）
 │   ├── run_servo_test.launch                  #   舵机测试终端
 │   ├── run_flight_recorder.launch             #   飞行数据录像
-│   └── auto_drop.launch                       #   自动抛投
+│   ├── auto_drop.launch                       #   自动抛投
+│   └── video_recorder.launch                  #   D435i RGB 视频录制（训练数据采集）
 ├── config/
 │   └── params.yaml                            #   全局参数
 ├── msg/
@@ -1072,7 +1074,7 @@ rostopic hz /vision/color/image_raw   # 应该有稳定 30Hz 输出
 
 **启动文件：** `detector_node.launch`
 
-**功能：** 一键启动 D435i 相机 + YOLO 检测。支持**自动启动 roscore / MAVROS**（如未运行），读取飞控数据并在画面左下角面板显示。加载 YOLOv8 模型逐帧推理，发布检测结果和飞控数据。
+**功能：** 一键启动 D435i 相机 + YOLO 检测。支持**自动启动 roscore / MAVROS**（如未运行），读取飞控数据并在画面底部半透明两栏信息栏显示（左=状态，右=坐标）。加载 YOLOv8 模型逐帧推理，发布检测结果和飞控数据。
 
 **测试什么：** 验证模型能否正确识别圆筒、置信度是否够高、检测帧率是否满足实时要求。验证 MAVROS 连接和数据读取是否正常。
 
@@ -1251,43 +1253,47 @@ Z = depth
 
 这个旋转变换由 TF 树（`d435i_color_optical_frame` → `base_link`）和 `geopose_node` 负责。`detector_node` 只输出**纯净的标准相机光学坐标**，不做任何自定义符号翻转。
 
-### 画面左下角固定面板（飞控状态）
+### 画面底部信息栏（状态 + 坐标，两栏合并）
 
-窗口左下角有一个固定面板，显示检测摘要 + 飞控状态：
+之前的独立左下角面板已合并到底部栏，底部栏采用**左右两栏**布局，左栏显示检测摘要和飞控状态，右栏显示目标坐标变换结果，所有信息集中在画面最底部半透明黑底上显示。
 
-**飞控未连接时：**
-```
-detected: 3  FPS 18.6
-FC: disconnected
-model: best.pt  device: cpu
-```
+#### 左栏（状态信息）
 
-**飞控已连接时（有 RTK GPS）：**
-```
-detected: 3  FPS 18.6
-FC: connected  GUIDED  ARM
-Bat: 16.8V  Sat: 20  RTK Fixed
-GPS: 22.1234567  114.1234567  15.23m
-model: best.pt  device: cpu
-```
+| 行 | 内容 | 颜色 | 数据来源 |
+|------|------|------|---------|
+| 1 | `DETECT: N  FPS X.X  |  model @ device` | 黄色 | YOLO 推理 + 本地计时 |
+| 2 | `FC: MODE ARM conn  |  Z: +XX.XX m` | 绿色 | `/mavros/state` + `/mavros/local_position/pose` |
+| 3 | `Bat: X.XV  Sat: N  RTK  |  AMMO: A-N B-N` | 天蓝 | `/mavros/battery` + `/mavros/gpsstatus/gps1/raw` + MissionStatus |
+| 4 | `FC WGS84: lat=... lon=... alt=...` | 金色 | `/mavros/global_position/global` |
 
-**面板各行含义：**
+#### 右栏（目标坐标变换）
 
-| 行 | 字段 | 含义 | 数据来源 |
-|----|------|------|---------|
-| 1 | `detected: N` | 当前帧目标数量（0=无目标） | YOLO 推理结果 |
-| 1 | `FPS X.X` | 推理帧率 | 本地计时 |
-| 2 | `FC: connected` | 飞控连接状态 | `/mavros/state.connected` |
-| 2 | `MODE` | 当前飞行模式（GUIDED/AUTO/LOITER/...） | `/mavros/state.mode` |
-| 2 | `ARM/DISARM` | 解锁状态 | `/mavros/state.armed` |
-| 3 | `Bat: X.XV` | 电池电压 | `/mavros/battery.voltage` |
-| 3 | `Sat: N` | 可见卫星数量 | `/mavros/gpsstatus/gps1/raw.satellites_visible` |
-| 3 | `RTK Fixed` | GPS 定位类型 | `/mavros/gpsstatus/gps1/raw.fix_type` |
-| 4 | `GPS: lat lon alt` | 厘米级大地坐标（WGS84） | `/mavros/global_position/global` |
+| 行 | 内容 | 颜色 | 说明 |
+|------|------|------|------|
+| 1 | `TARGET BODY  x=+...  y=+...  z=... m` | 天蓝 | 桶在机体坐标系下的位置，**无需 GPS**，纯 TF+深度即可算出 |
+| 2 | `FC NED  N=+...  E=+...  D=+... m` | 绿色 | 飞机在飞控 NED 下的位置（ENU XY对调 Z取反） |
+| 3 | `BKT NED  N=+...  E=+...  D=+...  dN=+... dE=+... dD=+...` | 黄色 | 桶绝对 NED + 相对飞机的 NED 偏移 |
+| 4 | `BKT WGS84  lat=...  lon=...  alt=... m` | 黄色 | 桶的大地坐标，**需 GPS fix** |
 
-> **面板数据容错：** 如果 MAVROS 未运行或 `mavros_msgs` 未安装，飞控数据行自动隐藏（只显示 `FC: disconnected`），不影响检测功能。
+#### 数据缺失时的占位显示
+
+| 缺失条件 | 左栏显示 | 右栏显示 |
+|---------|---------|---------|
+| 飞控未连接 | `FC: disconnected` | — |
+| 无 local_pose | `Z: ---` | `FC NED --- (no local pose)` |
+| 无 GPS fix | `FC WGS84: --- (no GPS fix)` | `BKT WGS84 --- (no GPS fix)` |
+| 无检测目标 | — | `TARGET BODY --- (no target)` / `BKT NED --- (no target)` |
+| TF 查找失败 | — | `TARGET BODY --- (tf failed)` |
+
+> **坐标约定：** MAVROS 本地位姿是 ENU（x东、y北、z上），飞控显示改成 NED（x北、y东、z下），换算固定为：XY 对调、Z 取反。
 >
-> **GPS 坐标精度：** RTK Fixed 模式下，面板显示的经纬度精度可达 7 位小数（厘米级）。`altitude` 为 WGS84 椭球高度 (m)。
+> **显示用途：** 这是手持标定和仿真验证工具，用于检查坐标变换是否正确；它不会发 setpoint、不会切模式、不会驱动飞机运动。
+>
+> **TF 前提：** 必须存在 `camera_frame -> body_frame` 的静态变换（默认 `d435i_color_optical_frame -> base_link`，由 `detector_node.launch` 中的 `camera_to_body_tf` 节点提供）。若 TF 查找失败，右栏会显示 `tf failed` 占位符，但节点不会退出。
+>
+> **室内测试：** 无 GPS 时左栏第 4 行和右栏第 4 行显示占位符，但不影响右栏第 1 行 `TARGET BODY`（机体系坐标，纯 TF+深度）——这是室内验证变换精度的主要依据，用卷尺测实际前后/左右/上下距离即可校验。
+>
+> **颜色约定：** 黄色=目标/检测，绿色=飞控状态，天蓝=机体系坐标，金色=GPS/WGS84，红色=缺失/错误。
 
 ### 画面中下区域任务叠加文字 (AIMING!! / DROP!!!)
 
@@ -1302,6 +1308,16 @@ model: best.pt  device: cpu
 >
 > **为什么选择自定义消息而不是直接监听 MAVLink：** 自定义 ROS 消息 (`MissionStatus`) 更简单可靠——main.py 是任务状态的唯一权威来源，detector_node 只需被动接收显示，不需要解析 MAVLink 协议。这避免了在 detector_node 中引入 pymavlink 依赖和复杂的 MAVLink 消息解析逻辑。
 
+#### 坐标变换（已内联 geopose 逻辑）
+
+`detector_node.py` 已经直接内联了原 `geopose_node.py` 的相机→机体→ENU→WGS84 变换逻辑：
+- **不再需要单独运行 `geopose_node`** 即可在画面上验证坐标
+- 最佳目标 `best` 在 detector_node 内部完成一次 TF + 四元数旋转
+- 结果显示在底部栏**右栏**，只做显示，不参与瞄准/控制
+- 底部栏**左栏**同时显示检测摘要 + 飞控状态，不再有独立面板
+
+> 完整布局和颜色约定见上方「画面底部信息栏」章节。
+
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `yolo_device` | cpu | cpu / cuda:0 |
@@ -1315,12 +1331,27 @@ model: best.pt  device: cpu
 | `fc_battery_topic` | `/mavros/battery` | 电池状态话题 |
 | `fc_gps_topic` | `/mavros/global_position/global` | GPS 大地坐标话题 |
 | `fc_gpsraw_topic` | `/mavros/gpsstatus/gps1/raw` | GPS 原始数据话题（卫星数+RTK状态） |
+| `body_frame` | `base_link` | 机体坐标系 TF frame ID |
+| `camera_frame` | `d435i_color_optical_frame` | 相机光学系 TF frame ID |
+| `transform_timeout_sec` | 0.10 | TF 查询超时 (s) |
+| `min_confidence` | 0.30 | 坐标变换最低置信度，低于此值底部桶坐标栏显示占位符 |
+| `geo_result_timeout_sec` | 0.50 | 最佳目标坐标缓存超时；超过后底部栏显示 `no target` |
+| `publish_geo_target` | false | true 时 detector_node 额外发布 `/vision/target_global` (GeoTarget) |
+| `output_topic` | `/vision/target_global` | GeoTarget 输出话题名 |
+| `publish_invalid` | true | `publish_geo_target=true` 时，是否发布无效/失败状态 |
 
 ---
 
-### 5. geopose_node.py — 大地坐标变换
+### 5. geopose_node.py — 旧版独立坐标变换节点（现可选）
 
 **启动文件：** `run_main.launch`（加 `enable_geopose:=true`）
+
+**当前定位：** `geopose_node.py` 的变换逻辑已经内联到 `detector_node.py`。默认情况下，你**不再需要单独运行 geopose_node** 来查看桶的 NED/WGS84 验证结果。
+
+`geopose_node.py` 现在主要用于两种场景：
+
+- 临时与 detector_node 内联结果做数值对照
+- 需要单独发布 `/vision/target_global` 且不想通过 `detector_node` 的 `publish_geo_target:=true` 开关时
 
 **功能：** 实现完整的坐标变换链：相机光学系 → TF → 机体 FRD → 四元数旋转 → ENU (东北天) → geographiclib → WGS84 (经纬高)。
 
@@ -1344,7 +1375,7 @@ model: best.pt  device: cpu
 **启动命令：**
 
 ```bash
-# 一条命令启动 main + camera + YOLO + geopose
+# 一条命令启动 main + camera + YOLO + geopose（仅在需要独立对照时）
 roslaunch cuadc_vision run_main.launch enable_geopose:=true
 ```
 
@@ -1359,6 +1390,14 @@ roslaunch cuadc_vision run_main.launch enable_geopose:=true auto_arm:=false auto
 - TF 树中 `d435i_color_optical_frame → base_link` 的静态变换
 
 **输出话题：** `/vision/target_global`（类型 GeoTarget）
+
+> **替代方式：** 若只想保留单节点架构，可直接让 detector_node 代发同名消息：
+>
+> ```bash
+> roslaunch cuadc_vision detector_node.launch publish_geo_target:=true
+> ```
+>
+> 此时不必再单独运行 `geopose_node.py`。
 
 **GeoTarget 消息字段：**
 
@@ -1516,7 +1555,7 @@ roslaunch cuadc_vision auto_drop.launch pixel_threshold:=30.0 min_conf:=0.7
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `pixel_threshold` | 20.0 | 对准容差 (px)，越小对准越严格 |
-| `min_conf` | 0.5 | 最低检测置信度 |
+| `min_conf` | 0.6 | 最低检测置信度 |
 | `channel` | 9 | 舵机通道号 |
 | `release_pwm` | 1900 | 释放时的 PWM 值 |
 | `reset_pwm` | 1100 | 复位时的 PWM 值 |
@@ -1527,16 +1566,111 @@ roslaunch cuadc_vision auto_drop.launch pixel_threshold:=30.0 min_conf:=0.7
 
 ---
 
-## 启动文件总览
+### 8. one_key_takeoff.py — 一键起飞
 
+**启动文件：** 无独立 launch，直接用 `rosrun` 或 `python3` 启动
+
+**功能：** 一键完成 GUIDED 切换 → 解锁 → 起飞 → 到达目标高度后自动切换到 LOITER 悬停。无需手动操作遥控器。
+
+**流程：**
+1. 自动检查并启动 roscore / MAVROS（可关闭）
+2. 等待飞控连接与 `/mavros/local_position/pose` 可用
+3. 切换到 GUIDED
+4. 解锁
+5. 发送起飞指令到目标高度（默认 3.0 m）
+6. 到达高度后切换到 LOITER
+
+**测试什么：** 验证"全自动起飞"链路是否正常，适合快速测试飞控响应。⚠️ 注意：此脚本会实际解锁并起飞，**仅在有 GPS 的室外环境使用**。
+
+**启动命令：**
+
+```bash
+# ① 默认 3m 高度，自动启动 MAVROS
+rosrun cuadc_vision one_key_takeoff.py
+
+# ② 指定起飞高度 + 关闭 MAVROS 自动启动
+rosrun cuadc_vision one_key_takeoff.py _takeoff_altitude:=5.0 _auto_start_mavros:=false
+
+# ③ 直接 Python 启动（全自动）
+python3 ~/catkin_ws/src/cuadc_src/scripts/one_key_takeoff.py
+```
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `takeoff_altitude` | 3.0 | 起飞目标高度 (m) |
+| `hover_mode` | LOITER | 到达高度后切换的悬停模式 |
+| `auto_start_mavros` | true | 自动检测并启动 MAVROS |
+| `mavros_fcu_url` | `/dev/ttyACM0:921600` | 飞控串口地址 |
+| `connection_timeout` | 30.0 | 等待飞控连接超时 (s) |
+| `service_timeout` | 10.0 | 等待 MAVROS 服务超时 (s) |
+| `ekf_timeout` | 30.0 | 等待 EKF/本地位姿超时 (s) |
+| `takeoff_timeout` | 30.0 | 等待起飞到目标高度超时 (s) |
+| `altitude_reach_ratio` | 1.0 | 判定到达高度的比例（1.0=100%即3m） |
+| `mode_settle_time` | 1.5 | 模式切换后稳定等待 (s) |
+| `arm_settle_time` | 1.5 | 解锁后稳定等待 (s) |
+| `monitor_after_loiter` | true | 完成后是否持续监控并打印悬停状态 |
+
+**验证是否正常：** 终端依次打印 `飞控已连接 → 本地位姿已就绪 → 飞行模式切换至: GUIDED → 解锁成功 → 起飞指令已发送 → 已到达目标高度附近 → 飞行模式切换至: LOITER → 流程完成`。
+
+> ⚠️ **与 main.py 的区别：** `one_key_takeoff.py` 只是一个简单的顺序脚本（一键式），不维护状态机、不做目标检测、不做自动抛投。它适合快速验证飞控通信和起飞链路。正式比赛请使用 `main.py`。
+
+---
+
+### 9. video_recorder_node.py — D435i RGB 视频录制
+
+**启动文件：** `video_recorder.launch`
+
+**功能：** 订阅 `/vision/color/image_raw` 话题，启动即录，Ctrl+C 停止。录制的视频用于 Roboflow RAPID 模式训练 YOLO 模型。
+
+**用途：** 采集比赛场景下的圆筒/桶的 RGB 视频，后续上传到 Roboflow 做自动标注和模型训练。
+
+**测试什么：** 验证 D435i RGB 流是否能正常录制为 .avi 文件，画面是否清晰、帧率是否稳定。
+
+**启动后你可以：**
+- 默认弹出预览窗口，按 `Ctrl+C` 停止录制
+- 关闭预览窗口：`show_window:=false`
+- 调整分辨率节省空间：`color_width:=640 color_height:=480`
+
+**启动命令：**
+
+```bash
+# ① 默认 1280×720 @ 30FPS，弹预览窗口
+roslaunch cuadc_vision video_recorder.launch
+
+# ② 低分辨率省空间
+roslaunch cuadc_vision video_recorder.launch color_width:=640 color_height:=480
+
+# ③ 关预览窗口
+roslaunch cuadc_vision video_recorder.launch show_window:=false
+```
+
+**输出：** `~/cuadc_videos/cuadc_train_YYYYMMDD_HHMMSS.avi`
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `color_topic` | `/vision/color/image_raw` | 订阅的彩色图像话题 |
+| `fps` | 30.0 | 录制帧率 |
+| `output_dir` | `~/cuadc_videos` | 视频输出目录 |
+| `codec` | MJPG | OpenCV 编码器 (MJPG / XVID) |
+| `file_prefix` | `cuadc_train` | 输出文件名前缀 |
+| `show_window` | true | 弹出预览窗口 |
+
+**验证是否正常：** 终端打印 `Recording started: ~/cuadc_videos/cuadc_train_...` 且输出目录出现 .avi 文件。预览窗口左上角应有红色 "REC N" 帧计数。
+
+> **与 flight_data_video_recorder_node.py 的区别：** `video_recorder_node.py` 启动即录，方便快速采集训练数据，不叠加飞行数据 OSD。`flight_data_video_recorder_node.py` 是解锁自动录、上锁自动停，叠加飞行数据（高度、GPS、电压等）用于飞行后分析。
+
+---
+
+## 启动文件总览
 | 文件 | 包含节点 | 用途 |
 |------|---------|------|
 | `camera_node.launch` | camera | 相机驱动（配合 rviz） |
 | `detector_node.launch` | camera + detector | 相机 + YOLO + OpenCV 窗口 |
-| `run_main.launch` | main + camera + detector + geopose | 总启动 |
+| `run_main.launch` | main + camera + detector（+ geopose 可选） | 总启动 |
 | `run_servo_test.launch` | servo_test | 舵机测试 |
 | `run_flight_recorder.launch` | camera + flight_data_video_recorder | 飞行录像 |
 | `auto_drop.launch` | detector + auto_drop | 自动抛投 |
+| `video_recorder.launch` | camera + video_recorder | 训练视频录制 |
 
 ---
 
@@ -1572,9 +1706,9 @@ roslaunch cuadc_vision run_flight_recorder.launch
 
 | 节点 | 话题 | 用途 |
 |------|------|------|
-| camera_node | `/d435i/color/image_raw` | 彩色图 |
-| camera_node | `/d435i/aligned_depth/image_raw` | 深度图 |
-| camera_node | `/d435i/color/camera_info` | 相机内参 |
+| camera_node | `/vision/color/image_raw` | 彩色图 |
+| camera_node | `/vision/aligned_depth/image_raw` | 深度图 |
+| camera_node | `/vision/color/camera_info` | 相机内参 |
 | detector_node | `/vision/yolo/detection` | 最佳目标 |
 | detector_node | `/vision/yolo/detections` | 全部目标 |
 | detector_node | `/vision/bucket/info` | 目标数量 + 像素偏差 |
@@ -1584,8 +1718,8 @@ roslaunch cuadc_vision run_flight_recorder.launch
 
 ```bash
 # 验证话题
-rostopic list | grep -E "d435i|yolo|competition|servo"
-rostopic echo /competition/target_global
+rostopic list | grep -E "vision|yolo|servo"
+rostopic echo /vision/target_global
 ```
 
 ---

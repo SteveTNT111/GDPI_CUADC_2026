@@ -24,7 +24,7 @@ detector_node:
   # 坐标
   invert_camera_x: true
   # 深度
-  depth_patch_radius: 2
+  depth_patch_radius: 5
   # 显示
   show_window: false
   warmup: true
@@ -36,6 +36,24 @@ detector_node:
   # 飞控 MAVROS
   auto_start_mavros: true
   mavros_fcu_url: "/dev/ttyACM0:921600"
+  fc_state_topic: "/mavros/state"
+  fc_battery_topic: "/mavros/battery"
+  fc_gps_topic: "/mavros/global_position/global"
+  fc_gpsraw_topic: "/mavros/gpsstatus/gps1/raw"
+  fc_local_pose_topic: "/mavros/local_position/pose"
+  # 相机安装外参（由 launch 文件中的 static_transform_publisher 使用）
+  # 相机在机体重心正下方，镜头朝下，相机顶部(USB口)朝向机体前方
+  # camera_mount_z: 相机光学中心到机体 CG 的竖直距离 (m)，机体 Z+ 为下，正值=在 CG 下方
+  camera_mount_z: 0.40
+  # 内联 geopose / 底部坐标栏
+  body_frame: "base_link"
+  camera_frame: "d435i_color_optical_frame"
+  min_confidence: 0.30
+  transform_timeout_sec: 0.10
+  geo_result_timeout_sec: 0.50
+  publish_geo_target: false
+  output_topic: "/vision/target_global"
+  publish_invalid: true
 
 # ---- geopose_node ----
 geopose_node:

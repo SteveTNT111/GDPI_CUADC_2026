@@ -84,7 +84,7 @@ class OneKeyTakeoffNode:
         self.takeoff_altitude = float(rospy.get_param("~takeoff_altitude", 3.0))
         self.hover_mode = rospy.get_param("~hover_mode", "LOITER")
         self.auto_start_mavros = bool(rospy.get_param("~auto_start_mavros", True))
-        self.mavros_fcu_url = rospy.get_param("~mavros_fcu_url", "/dev/ttyACM0:921600")
+        self.mavros_fcu_url = rospy.get_param("~mavros_fcu_url", "/dev/ttyACM0:115200")
         self.connection_timeout = float(rospy.get_param("~connection_timeout", 30.0))
         self.service_timeout = float(rospy.get_param("~service_timeout", 10.0))
         self.ekf_timeout = float(rospy.get_param("~ekf_timeout", 30.0))
