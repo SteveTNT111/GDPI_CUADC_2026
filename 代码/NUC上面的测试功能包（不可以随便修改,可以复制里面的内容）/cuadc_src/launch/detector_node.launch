@@ -13,6 +13,10 @@
   <!-- 相机参数 -->
   <arg name="fps" default="30" />
 
+  <!-- 相机安装外参：相机在机体重心正下方，镜头朝下，相机顶部朝机体前方 -->
+  <!-- camera_mount_z: 相机光学中心到机体 CG 的竖直距离 (m)，机体 Z+ 为下，所以正值=在 CG 下方 -->
+  <arg name="camera_mount_z" default="0.40" />
+
   <!-- YOLO 参数 -->
   <arg name="yolo_model_path" default="$(find cuadc_vision)/models/best.onnx" />
   <arg name="yolo_device" default="cpu" />
@@ -31,6 +35,18 @@
     <param name="fps" value="$(arg fps)" />
   </node>
 
+  <!-- ==================== 相机→机体 TF 静态变换 ==================== -->
+  <!--
+    相机安装方式：D435i 在机体重心正下方，镜头朝下，相机顶部(USB口)朝向机体前方。
+    坐标映射：X_cam(右)→Y_body(右), Y_cam(下)→-X_body(后), Z_cam(光轴)→Z_body(下)
+    旋转：绕 Z 轴 +90° (yaw=1.5708 rad)
+    平移：(0, 0, camera_mount_z) — 相机位于 CG 正下方
+    若无此行，detector_node 的底部坐标栏 BUCKET NED 将始终显示 (tf failed)。
+  -->
+  <node pkg="tf2_ros" type="static_transform_publisher"
+        name="camera_to_body_tf"
+        args="0 0 $(arg camera_mount_z) 0 0 0.7071068 0.7071068 base_link d435i_color_optical_frame" />
+
   <!-- YOLO 检测（带 OpenCV 窗口） -->
   <node pkg="cuadc_vision"
         type="detector_node.py"
@@ -48,5 +64,6 @@
     <param name="class_names" value="$(arg yolo_class_names)" />
     <param name="target_classes" value="$(arg yolo_target_classes)" />
     <param name="cv_threads" value="$(arg yolo_cv_threads)" />
+    <param name="camera_mount_z" value="$(arg camera_mount_z)" />
   </node>
 </launch>
