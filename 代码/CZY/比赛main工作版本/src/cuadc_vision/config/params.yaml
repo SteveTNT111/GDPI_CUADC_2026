@@ -1,0 +1,66 @@
+# CUADC Vision 参数
+
+# ---- camera_node ----
+camera_node:
+  color_width: 640
+  color_height: 480
+  depth_width: 640
+  depth_height: 480
+  fps: 30
+  color_format: "bgr8"
+  auto_profile_fallback: true
+  align_depth_to_color: true
+  wait_timeout_ms: 5000
+  timeout_restart_count: 3
+  frame_id: "d435i_color_optical_frame"
+
+# ---- detector_node ----
+detector_node:
+  # 模型（支持 .pt 或 .onnx）
+  model_path: "models/best.pt"
+  conf_threshold: 0.5
+  imgsz: 640
+  device: "cpu"
+  # 坐标
+  invert_camera_x: true
+  # 深度
+  depth_patch_radius: 5
+  # 显示
+  show_window: false
+  warmup: true
+  cv_threads: 1
+  # 类别过滤（关键词，逗号分隔）
+  target_classes: "cylinder,tong,barrel,can,yuantong,white_cylinder,tube,drum,bucket"
+  # 类别名覆盖（逗号分隔，按 class_id 顺序）
+  class_names: ""
+  # 飞控 MAVROS
+  auto_start_mavros: true
+  mavros_fcu_url: "/dev/ttyACM0:921600"
+  fc_state_topic: "/mavros/state"
+  fc_battery_topic: "/mavros/battery"
+  fc_gps_topic: "/mavros/global_position/global"
+  fc_gpsraw_topic: "/mavros/gpsstatus/gps1/raw"
+  fc_local_pose_topic: "/mavros/local_position/pose"
+  # 相机安装外参（由 launch 文件中的 static_transform_publisher 使用）
+  # 相机在机体重心正下方，镜头朝下，相机顶部(USB口)朝向机体前方
+  # camera_mount_z: 相机光学中心到机体 CG 的竖直距离 (m)，机体 Z+ 为下，正值=在 CG 下方
+  camera_mount_z: 0.40
+  # 内联 geopose / 底部坐标栏
+  body_frame: "base_link"
+  camera_frame: "d435i_color_optical_frame"
+  min_confidence: 0.30
+  transform_timeout_sec: 0.10
+  geo_result_timeout_sec: 0.50
+  publish_geo_target: false
+  output_topic: "/vision/target_global"
+  publish_invalid: true
+
+# ---- geopose_node ----
+geopose_node:
+  global_position_topic: "/mavros/global_position/global"
+  local_pose_topic: "/mavros/local_position/pose"
+  body_frame: "base_link"
+  camera_frame: "d435i_color_optical_frame"
+  min_confidence: 0.30
+  transform_timeout_sec: 0.10
+  publish_invalid: true

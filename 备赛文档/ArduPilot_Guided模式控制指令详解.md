@@ -374,7 +374,7 @@ ros::Subscriber global_pos_sub = nh.subscribe<sensor_msgs::NavSatFix>(
 
 ### 关联笔记
 
-- 环境与操作手册见 [[03_竞赛资料/GDPI_CUADC_2026/备赛文档/ArduPilot_Copter45_SITL_Gazebo环境记录.md|ArduPilot Copter 4.5 SITL 与 Gazebo 环境记录]]
+- 环境与操作手册见 [[gazebo软件在环仿真知识和操作步骤|ArduPilot Copter 4.5 SITL 与 Gazebo 环境记录]]
 - 代码逐份说明见 `03_竞赛资料/GDPI_CUADC_2026/代码/HIT2025code/README.md`
 
 ---
