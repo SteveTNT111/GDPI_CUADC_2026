@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AP Gazebo SITL Launcher
+Comment=Launch Gazebo Classic and ArduPilot SITL
+Exec=/home/lab/catkin_ws/tools/launch_ap_gazebo_sitl.sh
+Icon=utilities-terminal
+Path=/home/lab/catkin_ws/tools
+Terminal=true
+StartupNotify=true
+Categories=Development;Robotics;

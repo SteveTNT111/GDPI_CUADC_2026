@@ -1,0 +1,44 @@
+<launch>
+  <!--
+    拆桨手持地面测试：启动 30 FPS 相机、视觉窗口和半自动瞄准脚本。
+    默认 dry_run=true，不发送真实舵机命令，不切换 GUIDED，不发布飞行 setpoint。
+  -->
+  <arg name="start_camera" default="true" />
+  <arg name="show_window" default="true" />
+  <arg name="camera_fps" default="30" />
+  <arg name="enable_b_dropper" default="false" />
+  <arg name="dry_run" default="true" />
+  <arg name="auto_start_servo_test" default="false" />
+  <arg name="close_after_drop" default="false" />
+  <arg name="require_disarmed_ground_test" default="true" />
+  <arg name="close_delay_s" default="1.0" />
+  <arg name="post_drop_display_s" default="0.0" />
+  <arg name="align_threshold_m" default="0.15" />
+  <!-- 容错测试默认拉长稳定时间，避免在故意移开目标前就完成 dry-run 投放。 -->
+  <arg name="stable_time_s" default="30.0" />
+  <arg name="lost_frame_threshold" default="10" />
+  <arg name="target_reacquire_timeout_s" default="4.0" />
+
+  <include file="$(find cuadc_vision)/launch/detector_node.launch">
+    <arg name="start_camera" value="$(arg start_camera)" />
+    <arg name="show_window" value="$(arg show_window)" />
+    <arg name="fps" value="$(arg camera_fps)" />
+  </include>
+
+  <include file="$(find cuadc_control)/launch/semi_auto_drop_test.launch">
+    <arg name="ground_test" value="true" />
+    <arg name="enable_b_dropper" value="$(arg enable_b_dropper)" />
+    <arg name="dry_run" value="$(arg dry_run)" />
+    <arg name="auto_start_detector" value="false" />
+    <arg name="auto_start_servo_test" value="$(arg auto_start_servo_test)" />
+    <arg name="close_after_drop" value="$(arg close_after_drop)" />
+    <arg name="require_disarmed_ground_test" value="$(arg require_disarmed_ground_test)" />
+    <arg name="close_delay_s" value="$(arg close_delay_s)" />
+    <arg name="post_drop_display_s" value="$(arg post_drop_display_s)" />
+    <arg name="align_threshold_m" value="$(arg align_threshold_m)" />
+    <arg name="stable_time_s" value="$(arg stable_time_s)" />
+    <arg name="lost_frame_threshold" value="$(arg lost_frame_threshold)" />
+    <arg name="target_reacquire_timeout_s" value="$(arg target_reacquire_timeout_s)" />
+    <arg name="vision_frame_rate_hz" value="$(arg camera_fps)" />
+  </include>
+</launch>

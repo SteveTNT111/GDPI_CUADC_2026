@@ -1,0 +1,75 @@
+<launch>
+  <!-- 飞手先手动解锁、起飞并保持 LOITER；本 launch 不启动起飞/解锁逻辑。 -->
+  <arg name="ground_test" default="false" />
+  <arg name="enable_b_dropper" default="false" />
+  <arg name="align_threshold_m" default="0.15" />
+  <arg name="target_drop_height_m" default="1.5" />
+  <arg name="height_tolerance_m" default="0.15" />
+  <arg name="stable_time_s" default="2.0" />
+  <arg name="setpoint_interval_s" default="0.1" />
+  <arg name="max_horizontal_speed_mps" default="0.05" />
+  <arg name="max_target_offset_m" default="2.0" />
+  <arg name="max_surface_z_drift_m" default="0.50" />
+  <arg name="lateral_divergence_growth_m" default="0.10" />
+  <arg name="lateral_divergence_window_s" default="3.0" />
+  <arg name="command_error_buffer_m" default="0.03" />
+  <arg name="after_a_delay_s" default="3.0" />
+  <arg name="auto_start_detector" default="true" />
+  <arg name="auto_start_servo_test" default="true" />
+  <arg name="close_after_drop" default="false" />
+  <arg name="require_disarmed_ground_test" default="true" />
+  <arg name="dry_run" default="false" />
+  <arg name="min_bucket_count" default="1" />
+
+  <arg name="aim_info_timeout_s" default="1.0" />
+  <arg name="lost_frame_threshold" default="10" />
+  <arg name="target_reacquire_timeout_s" default="4.0" />
+  <arg name="vision_frame_rate_hz" default="30.0" />
+  <arg name="state_timeout_s" default="2.0" />
+  <arg name="connection_timeout_s" default="30.0" />
+  <arg name="mode_timeout_s" default="8.0" />
+  <arg name="servo_wait_timeout_s" default="20.0" />
+  <arg name="close_delay_s" default="0.8" />
+  <arg name="post_drop_display_s" default="0.0" />
+  <arg name="detector_package" default="cuadc_vision" />
+  <arg name="detector_launch" default="detector_node.launch" />
+
+  <node pkg="cuadc_control"
+        type="semi_auto_drop_test.py"
+        name="semi_auto_drop_test"
+        output="screen"
+        required="true">
+    <param name="ground_test" value="$(arg ground_test)" />
+    <param name="enable_b_dropper" value="$(arg enable_b_dropper)" />
+    <param name="align_threshold_m" value="$(arg align_threshold_m)" />
+    <param name="target_drop_height_m" value="$(arg target_drop_height_m)" />
+    <param name="height_tolerance_m" value="$(arg height_tolerance_m)" />
+    <param name="stable_time_s" value="$(arg stable_time_s)" />
+    <param name="setpoint_interval_s" value="$(arg setpoint_interval_s)" />
+    <param name="max_horizontal_speed_mps" value="$(arg max_horizontal_speed_mps)" />
+    <param name="max_target_offset_m" value="$(arg max_target_offset_m)" />
+    <param name="max_surface_z_drift_m" value="$(arg max_surface_z_drift_m)" />
+    <param name="lateral_divergence_growth_m" value="$(arg lateral_divergence_growth_m)" />
+    <param name="lateral_divergence_window_s" value="$(arg lateral_divergence_window_s)" />
+    <param name="command_error_buffer_m" value="$(arg command_error_buffer_m)" />
+    <param name="after_a_delay_s" value="$(arg after_a_delay_s)" />
+    <param name="auto_start_detector" value="$(arg auto_start_detector)" />
+    <param name="auto_start_servo_test" value="$(arg auto_start_servo_test)" />
+    <param name="close_after_drop" value="$(arg close_after_drop)" />
+    <param name="require_disarmed_ground_test" value="$(arg require_disarmed_ground_test)" />
+    <param name="dry_run" value="$(arg dry_run)" />
+    <param name="min_bucket_count" value="$(arg min_bucket_count)" />
+    <param name="aim_info_timeout_s" value="$(arg aim_info_timeout_s)" />
+    <param name="lost_frame_threshold" value="$(arg lost_frame_threshold)" />
+    <param name="target_reacquire_timeout_s" value="$(arg target_reacquire_timeout_s)" />
+    <param name="vision_frame_rate_hz" value="$(arg vision_frame_rate_hz)" />
+    <param name="state_timeout_s" value="$(arg state_timeout_s)" />
+    <param name="connection_timeout_s" value="$(arg connection_timeout_s)" />
+    <param name="mode_timeout_s" value="$(arg mode_timeout_s)" />
+    <param name="servo_wait_timeout_s" value="$(arg servo_wait_timeout_s)" />
+    <param name="close_delay_s" value="$(arg close_delay_s)" />
+    <param name="post_drop_display_s" value="$(arg post_drop_display_s)" />
+    <param name="detector_package" value="$(arg detector_package)" />
+    <param name="detector_launch" value="$(arg detector_launch)" />
+  </node>
+</launch>

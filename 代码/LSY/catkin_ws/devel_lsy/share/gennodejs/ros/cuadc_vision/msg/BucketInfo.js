@@ -1,0 +1,335 @@
+// Auto-generated. Do not edit!
+
+// (in-package cuadc_vision.msg)
+
+
+"use strict";
+
+const _serializer = _ros_msg_utils.Serialize;
+const _arraySerializer = _serializer.Array;
+const _deserializer = _ros_msg_utils.Deserialize;
+const _arrayDeserializer = _deserializer.Array;
+const _finder = _ros_msg_utils.Find;
+const _getByteLength = _ros_msg_utils.getByteLength;
+let std_msgs = _finder('std_msgs');
+
+//-----------------------------------------------------------
+
+class BucketInfo {
+  constructor(initObj={}) {
+    if (initObj === null) {
+      // initObj === null is a special case for deserialization where we don't initialize fields
+      this.header = null;
+      this.count = null;
+      this.delta_x = null;
+      this.delta_y = null;
+      this.aim_offsets_valid = null;
+      this.a_crosshair_x = null;
+      this.a_crosshair_y = null;
+      this.a_delta_x = null;
+      this.a_delta_y = null;
+      this.b_crosshair_x = null;
+      this.b_crosshair_y = null;
+      this.b_delta_x = null;
+      this.b_delta_y = null;
+    }
+    else {
+      if (initObj.hasOwnProperty('header')) {
+        this.header = initObj.header
+      }
+      else {
+        this.header = new std_msgs.msg.Header();
+      }
+      if (initObj.hasOwnProperty('count')) {
+        this.count = initObj.count
+      }
+      else {
+        this.count = 0;
+      }
+      if (initObj.hasOwnProperty('delta_x')) {
+        this.delta_x = initObj.delta_x
+      }
+      else {
+        this.delta_x = 0.0;
+      }
+      if (initObj.hasOwnProperty('delta_y')) {
+        this.delta_y = initObj.delta_y
+      }
+      else {
+        this.delta_y = 0.0;
+      }
+      if (initObj.hasOwnProperty('aim_offsets_valid')) {
+        this.aim_offsets_valid = initObj.aim_offsets_valid
+      }
+      else {
+        this.aim_offsets_valid = false;
+      }
+      if (initObj.hasOwnProperty('a_crosshair_x')) {
+        this.a_crosshair_x = initObj.a_crosshair_x
+      }
+      else {
+        this.a_crosshair_x = 0.0;
+      }
+      if (initObj.hasOwnProperty('a_crosshair_y')) {
+        this.a_crosshair_y = initObj.a_crosshair_y
+      }
+      else {
+        this.a_crosshair_y = 0.0;
+      }
+      if (initObj.hasOwnProperty('a_delta_x')) {
+        this.a_delta_x = initObj.a_delta_x
+      }
+      else {
+        this.a_delta_x = 0.0;
+      }
+      if (initObj.hasOwnProperty('a_delta_y')) {
+        this.a_delta_y = initObj.a_delta_y
+      }
+      else {
+        this.a_delta_y = 0.0;
+      }
+      if (initObj.hasOwnProperty('b_crosshair_x')) {
+        this.b_crosshair_x = initObj.b_crosshair_x
+      }
+      else {
+        this.b_crosshair_x = 0.0;
+      }
+      if (initObj.hasOwnProperty('b_crosshair_y')) {
+        this.b_crosshair_y = initObj.b_crosshair_y
+      }
+      else {
+        this.b_crosshair_y = 0.0;
+      }
+      if (initObj.hasOwnProperty('b_delta_x')) {
+        this.b_delta_x = initObj.b_delta_x
+      }
+      else {
+        this.b_delta_x = 0.0;
+      }
+      if (initObj.hasOwnProperty('b_delta_y')) {
+        this.b_delta_y = initObj.b_delta_y
+      }
+      else {
+        this.b_delta_y = 0.0;
+      }
+    }
+  }
+
+  static serialize(obj, buffer, bufferOffset) {
+    // Serializes a message object of type BucketInfo
+    // Serialize message field [header]
+    bufferOffset = std_msgs.msg.Header.serialize(obj.header, buffer, bufferOffset);
+    // Serialize message field [count]
+    bufferOffset = _serializer.int32(obj.count, buffer, bufferOffset);
+    // Serialize message field [delta_x]
+    bufferOffset = _serializer.float32(obj.delta_x, buffer, bufferOffset);
+    // Serialize message field [delta_y]
+    bufferOffset = _serializer.float32(obj.delta_y, buffer, bufferOffset);
+    // Serialize message field [aim_offsets_valid]
+    bufferOffset = _serializer.bool(obj.aim_offsets_valid, buffer, bufferOffset);
+    // Serialize message field [a_crosshair_x]
+    bufferOffset = _serializer.float32(obj.a_crosshair_x, buffer, bufferOffset);
+    // Serialize message field [a_crosshair_y]
+    bufferOffset = _serializer.float32(obj.a_crosshair_y, buffer, bufferOffset);
+    // Serialize message field [a_delta_x]
+    bufferOffset = _serializer.float32(obj.a_delta_x, buffer, bufferOffset);
+    // Serialize message field [a_delta_y]
+    bufferOffset = _serializer.float32(obj.a_delta_y, buffer, bufferOffset);
+    // Serialize message field [b_crosshair_x]
+    bufferOffset = _serializer.float32(obj.b_crosshair_x, buffer, bufferOffset);
+    // Serialize message field [b_crosshair_y]
+    bufferOffset = _serializer.float32(obj.b_crosshair_y, buffer, bufferOffset);
+    // Serialize message field [b_delta_x]
+    bufferOffset = _serializer.float32(obj.b_delta_x, buffer, bufferOffset);
+    // Serialize message field [b_delta_y]
+    bufferOffset = _serializer.float32(obj.b_delta_y, buffer, bufferOffset);
+    return bufferOffset;
+  }
+
+  static deserialize(buffer, bufferOffset=[0]) {
+    //deserializes a message object of type BucketInfo
+    let len;
+    let data = new BucketInfo(null);
+    // Deserialize message field [header]
+    data.header = std_msgs.msg.Header.deserialize(buffer, bufferOffset);
+    // Deserialize message field [count]
+    data.count = _deserializer.int32(buffer, bufferOffset);
+    // Deserialize message field [delta_x]
+    data.delta_x = _deserializer.float32(buffer, bufferOffset);
+    // Deserialize message field [delta_y]
+    data.delta_y = _deserializer.float32(buffer, bufferOffset);
+    // Deserialize message field [aim_offsets_valid]
+    data.aim_offsets_valid = _deserializer.bool(buffer, bufferOffset);
+    // Deserialize message field [a_crosshair_x]
+    data.a_crosshair_x = _deserializer.float32(buffer, bufferOffset);
+    // Deserialize message field [a_crosshair_y]
+    data.a_crosshair_y = _deserializer.float32(buffer, bufferOffset);
+    // Deserialize message field [a_delta_x]
+    data.a_delta_x = _deserializer.float32(buffer, bufferOffset);
+    // Deserialize message field [a_delta_y]
+    data.a_delta_y = _deserializer.float32(buffer, bufferOffset);
+    // Deserialize message field [b_crosshair_x]
+    data.b_crosshair_x = _deserializer.float32(buffer, bufferOffset);
+    // Deserialize message field [b_crosshair_y]
+    data.b_crosshair_y = _deserializer.float32(buffer, bufferOffset);
+    // Deserialize message field [b_delta_x]
+    data.b_delta_x = _deserializer.float32(buffer, bufferOffset);
+    // Deserialize message field [b_delta_y]
+    data.b_delta_y = _deserializer.float32(buffer, bufferOffset);
+    return data;
+  }
+
+  static getMessageSize(object) {
+    let length = 0;
+    length += std_msgs.msg.Header.getMessageSize(object.header);
+    return length + 45;
+  }
+
+  static datatype() {
+    // Returns string type for a message object
+    return 'cuadc_vision/BucketInfo';
+  }
+
+  static md5sum() {
+    //Returns md5sum for a message object
+    return 'bed88d5fcfa32d568a9fb5d9f22c5d7b';
+  }
+
+  static messageDefinition() {
+    // Returns full string definition for message
+    return `
+    Header header
+    int32 count
+    float32 delta_x
+    float32 delta_y
+    bool aim_offsets_valid
+    float32 a_crosshair_x
+    float32 a_crosshair_y
+    float32 a_delta_x
+    float32 a_delta_y
+    float32 b_crosshair_x
+    float32 b_crosshair_y
+    float32 b_delta_x
+    float32 b_delta_y
+    
+    ================================================================================
+    MSG: std_msgs/Header
+    # Standard metadata for higher-level stamped data types.
+    # This is generally used to communicate timestamped data 
+    # in a particular coordinate frame.
+    # 
+    # sequence ID: consecutively increasing ID 
+    uint32 seq
+    #Two-integer timestamp that is expressed as:
+    # * stamp.sec: seconds (stamp_secs) since epoch (in Python the variable is called 'secs')
+    # * stamp.nsec: nanoseconds since stamp_secs (in Python the variable is called 'nsecs')
+    # time-handling sugar is provided by the client library
+    time stamp
+    #Frame this data is associated with
+    string frame_id
+    
+    `;
+  }
+
+  static Resolve(msg) {
+    // deep-construct a valid message object instance of whatever was passed in
+    if (typeof msg !== 'object' || msg === null) {
+      msg = {};
+    }
+    const resolved = new BucketInfo(null);
+    if (msg.header !== undefined) {
+      resolved.header = std_msgs.msg.Header.Resolve(msg.header)
+    }
+    else {
+      resolved.header = new std_msgs.msg.Header()
+    }
+
+    if (msg.count !== undefined) {
+      resolved.count = msg.count;
+    }
+    else {
+      resolved.count = 0
+    }
+
+    if (msg.delta_x !== undefined) {
+      resolved.delta_x = msg.delta_x;
+    }
+    else {
+      resolved.delta_x = 0.0
+    }
+
+    if (msg.delta_y !== undefined) {
+      resolved.delta_y = msg.delta_y;
+    }
+    else {
+      resolved.delta_y = 0.0
+    }
+
+    if (msg.aim_offsets_valid !== undefined) {
+      resolved.aim_offsets_valid = msg.aim_offsets_valid;
+    }
+    else {
+      resolved.aim_offsets_valid = false
+    }
+
+    if (msg.a_crosshair_x !== undefined) {
+      resolved.a_crosshair_x = msg.a_crosshair_x;
+    }
+    else {
+      resolved.a_crosshair_x = 0.0
+    }
+
+    if (msg.a_crosshair_y !== undefined) {
+      resolved.a_crosshair_y = msg.a_crosshair_y;
+    }
+    else {
+      resolved.a_crosshair_y = 0.0
+    }
+
+    if (msg.a_delta_x !== undefined) {
+      resolved.a_delta_x = msg.a_delta_x;
+    }
+    else {
+      resolved.a_delta_x = 0.0
+    }
+
+    if (msg.a_delta_y !== undefined) {
+      resolved.a_delta_y = msg.a_delta_y;
+    }
+    else {
+      resolved.a_delta_y = 0.0
+    }
+
+    if (msg.b_crosshair_x !== undefined) {
+      resolved.b_crosshair_x = msg.b_crosshair_x;
+    }
+    else {
+      resolved.b_crosshair_x = 0.0
+    }
+
+    if (msg.b_crosshair_y !== undefined) {
+      resolved.b_crosshair_y = msg.b_crosshair_y;
+    }
+    else {
+      resolved.b_crosshair_y = 0.0
+    }
+
+    if (msg.b_delta_x !== undefined) {
+      resolved.b_delta_x = msg.b_delta_x;
+    }
+    else {
+      resolved.b_delta_x = 0.0
+    }
+
+    if (msg.b_delta_y !== undefined) {
+      resolved.b_delta_y = msg.b_delta_y;
+    }
+    else {
+      resolved.b_delta_y = 0.0
+    }
+
+    return resolved;
+    }
+};
+
+module.exports = BucketInfo;

@@ -1,0 +1,86 @@
+# Autonomous two-drop mission configuration
+#
+# Mission-local axes, confirmed by the user's flight test:
+#   +X = aircraft right
+#   +Y = aircraft forward
+#   +Z = up
+#
+# SAFE DEFAULTS: the node will not arm unless both execute_mission and
+# calibration_confirmed are true.
+
+execute_mission: false
+calibration_confirmed: false
+authorization_required: true
+authorization_phrase: "FLY"
+
+# Fixed mission flow:
+#   take off to 2.5 m
+#   search along +Y for 3 m at 0.20 m/s
+#   descend and aim at 1.2 m
+#   after both drops climb to 3.0 m, then RTL
+takeoff_altitude_m: 2.5
+search_forward_distance_m: 3.0
+search_forward_speed_mps: 0.20
+search_finish_timeout_s: 8.0
+aim_altitude_m: 1.2
+rtl_climb_altitude_m: 3.0
+
+takeoff_tolerance_m: 0.25
+takeoff_timeout_s: 45.0
+arrival_tolerance_m: 0.35
+arrival_hold_s: 1.0
+
+total_mission_timeout_s: 300.0
+
+# Camera optical centre relative to the aircraft control reference point.
+# Measure these values before setting calibration_confirmed=true.
+camera_x_right_m: 0.0
+camera_y_forward_m: 0.0
+camera_down_m: 0.40
+
+drop_order: ["A", "B"]
+
+# Before A: detected camera-centred X/Y must each be within +/-0.20 m,
+# altitude must be near 1.2 m, and all conditions must remain true for 2 s.
+align_threshold_x_m: 0.20
+align_threshold_y_m: 0.20
+align_threshold_z_m: 0.15
+align_stable_time_s: 2.0
+max_visual_correction_step_m: 0.60
+target_lost_timeout_s: 1.0
+max_yaw_deviation_deg: 12.0
+
+# After A: move aircraft +Y (forward) by 0.08 m, hold position for 2 s,
+# then trigger B. Servo mapping is provisional until measured.
+b_forward_shift_m: 0.08
+b_position_tolerance_m: 0.05
+b_stable_time_s: 2.0
+
+# Target tracking and D435 depth acceptance.
+target_min_confidence: 0.60
+target_min_depth_m: 0.30
+target_max_depth_m: 8.0
+target_min_hits: 4
+target_history_size: 7
+target_match_radius_m: 0.70
+target_stale_timeout_s: 1.5
+dropped_blacklist_radius_m: 0.55  # retained by tracker; unused in this one-target flow
+
+# A and B are controlled independently through MAV_CMD_DO_SET_SERVO.
+enable_servo_drop: false
+allow_inflight_dry_run: false
+servo_a_channel: 5
+servo_b_channel: 6
+servo_open_pwm: 1500
+servo_close_pwm: 1000
+servo_hold_s: 0.8
+servo_cooldown_s: 2.0
+
+rtl_on_failure: true
+loop_rate_hz: 10.0
+connection_timeout_s: 30.0
+vision_ready_timeout_s: 30.0
+service_timeout_s: 10.0
+pose_timeout_s: 1.0
+mode_timeout_s: 6.0
+arm_timeout_s: 6.0

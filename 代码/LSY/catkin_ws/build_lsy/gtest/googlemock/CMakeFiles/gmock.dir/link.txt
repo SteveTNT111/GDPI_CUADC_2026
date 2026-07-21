@@ -1,0 +1,1 @@
+/usr/lib/ccache/c++ -fPIC   -shared -Wl,-soname,libgmock.so -o ../lib/libgmock.so CMakeFiles/gmock.dir/src/gmock-all.cc.o  -Wl,-rpath,/home/lab/GDPI_CUADC_2026/代码/LSY/catkin_ws/build_lsy/gtest/lib ../lib/libgtest.so -lpthread 

@@ -1,0 +1,63 @@
+<launch>
+  <arg name="start_camera" default="false" />
+  <arg name="start_detector" default="false" />
+  <arg name="yolo_model_path" default="$(find cuadc_vision)/models/best.pt" />
+  <arg name="yolo_device" default="cpu" />
+  <arg name="fps" default="30" />
+
+  <arg name="ground_test" default="false" />
+  <arg name="auto_guided" default="false" />
+  <arg name="dry_run" default="true" />
+  <arg name="enable_servo_drop" default="false" />
+  <arg name="test_dropper" default="A" />
+
+  <arg name="aiming_altitude_m" default="2.0" />
+  <arg name="aiming_threshold_m" default="0.15" />
+  <arg name="aiming_stable_time_s" default="1.5" />
+  <arg name="target_min_hits" default="3" />
+
+  <arg name="ammo_a" default="1" />
+  <arg name="ammo_b" default="1" />
+  <arg name="servo_a_channel" default="5" />
+  <arg name="servo_b_channel" default="6" />
+  <arg name="servo_open_pwm" default="1500" />
+  <arg name="servo_close_pwm" default="1000" />
+  <arg name="camera_mount_z" default="0.40" />
+
+  <node pkg="tf2_ros" type="static_transform_publisher"
+        name="camera_to_body_tf"
+        args="0 0 $(arg camera_mount_z) 0 0 0.7071068 0.7071068 base_link d435i_color_optical_frame" />
+
+  <group if="$(arg start_camera)">
+    <node pkg="cuadc_vision" type="camera_node.py" name="camera_node" output="screen">
+      <param name="fps" value="$(arg fps)" />
+    </node>
+  </group>
+
+  <group if="$(arg start_detector)">
+    <node pkg="cuadc_vision" type="detector_node.py" name="detector_node" output="screen">
+      <param name="model_path" value="$(arg yolo_model_path)" />
+      <param name="device" value="$(arg yolo_device)" />
+      <param name="camera_mount_z" value="$(arg camera_mount_z)" />
+    </node>
+  </group>
+
+  <node pkg="cuadc_vision" type="single_bucket_aim_test.py" name="single_bucket_aim_test" output="screen" required="true">
+    <param name="ground_test" value="$(arg ground_test)" />
+    <param name="auto_guided" value="$(arg auto_guided)" />
+    <param name="dry_run" value="$(arg dry_run)" />
+    <param name="enable_servo_drop" value="$(arg enable_servo_drop)" />
+    <param name="test_dropper" value="$(arg test_dropper)" />
+    <param name="aiming_altitude_m" value="$(arg aiming_altitude_m)" />
+    <param name="aiming_threshold_m" value="$(arg aiming_threshold_m)" />
+    <param name="aiming_stable_time_s" value="$(arg aiming_stable_time_s)" />
+    <param name="target_min_hits" value="$(arg target_min_hits)" />
+    <param name="ammo_a" value="$(arg ammo_a)" />
+    <param name="ammo_b" value="$(arg ammo_b)" />
+    <param name="servo_a_channel" value="$(arg servo_a_channel)" />
+    <param name="servo_b_channel" value="$(arg servo_b_channel)" />
+    <param name="servo_open_pwm" value="$(arg servo_open_pwm)" />
+    <param name="servo_close_pwm" value="$(arg servo_close_pwm)" />
+    <param name="camera_mount_z" value="$(arg camera_mount_z)" />
+  </node>
+</launch>

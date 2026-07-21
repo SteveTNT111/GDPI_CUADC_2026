@@ -1,0 +1,2 @@
+set(d435i_yellow_circle_detector_MESSAGE_FILES "/home/lab/catkin_ws/src/d435i_yellow_circle_detector/msg/YellowCircle.msg;/home/lab/catkin_ws/src/d435i_yellow_circle_detector/msg/YoloDetection.msg;/home/lab/catkin_ws/src/d435i_yellow_circle_detector/msg/YoloDetections.msg;/home/lab/catkin_ws/src/d435i_yellow_circle_detector/msg/MissionTarget.msg;/home/lab/catkin_ws/src/d435i_yellow_circle_detector/msg/GeoTarget.msg")
+set(d435i_yellow_circle_detector_SERVICE_FILES "")

@@ -1,0 +1,13 @@
+Header header
+int32 count
+float32 delta_x
+float32 delta_y
+bool aim_offsets_valid
+float32 a_crosshair_x
+float32 a_crosshair_y
+float32 a_delta_x
+float32 a_delta_y
+float32 b_crosshair_x
+float32 b_crosshair_y
+float32 b_delta_x
+float32 b_delta_y

@@ -1,0 +1,22 @@
+<launch>
+  <arg name="takeoff_altitude" default="2.5" />
+  <arg name="forward_distance" default="35.0" />
+  <arg name="second_forward_distance" default="60.0" />
+  <arg name="waypoint_hover_time" default="5.0" />
+  <arg name="authorization_phrase" default="YES" />
+  <arg name="auto_start_mavros" default="true" />
+  <arg name="fcu_url" default="/dev/ttyACM0:115200" />
+
+  <node pkg="cuadc_control"
+        type="one_key_takeoff_wgs84_forward_rtl.py"
+        name="one_key_takeoff_wgs84_forward_rtl"
+        output="screen">
+    <param name="takeoff_altitude" value="$(arg takeoff_altitude)" />
+    <param name="forward_distance" value="$(arg forward_distance)" />
+    <param name="second_forward_distance" value="$(arg second_forward_distance)" />
+    <param name="waypoint_hover_time" value="$(arg waypoint_hover_time)" />
+    <param name="authorization_phrase" value="$(arg authorization_phrase)" />
+    <param name="auto_start_mavros" value="$(arg auto_start_mavros)" />
+    <param name="mavros_fcu_url" value="$(arg fcu_url)" />
+  </node>
+</launch>

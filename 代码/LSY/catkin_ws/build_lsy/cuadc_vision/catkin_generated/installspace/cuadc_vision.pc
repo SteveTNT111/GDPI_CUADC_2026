@@ -1,0 +1,8 @@
+prefix=/home/lab/GDPI_CUADC_2026/代码/LSY/catkin_ws/install
+
+Name: cuadc_vision
+Description: Description of cuadc_vision
+Version: 1.0.0
+Cflags: -I${prefix}/include
+Libs: -L${prefix}/lib 
+Requires: rospy std_msgs sensor_msgs geometry_msgs cv_bridge image_transport tf2_ros tf2_geometry_msgs mavros_msgs message_runtime

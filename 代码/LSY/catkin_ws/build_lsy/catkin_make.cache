@@ -1,0 +1,2 @@
+cuadc_control:cuadc_vision
+-DCATKIN_DEVEL_PREFIX=/home/lab/GDPI_CUADC_2026/代码/LSY/catkin_ws/devel_lsy -DCMAKE_INSTALL_PREFIX=/home/lab/GDPI_CUADC_2026/代码/LSY/catkin_ws/install -DCATKIN_WHITELIST_PACKAGES=cuadc_control;cuadc_vision -G Unix Makefiles

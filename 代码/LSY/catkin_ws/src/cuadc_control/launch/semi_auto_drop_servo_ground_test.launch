@@ -1,0 +1,28 @@
+<launch>
+  <!--
+    拆桨、未解锁的真实舵机视觉投放测试。
+    目标有效后不等待 Enter；X/Y 误差均小于 2cm 并连续稳定 2s 后，
+    执行 A on，1s 后执行 A off。10 帧无效正式判丢失，随后等待 4s 重获。
+  -->
+  <arg name="start_camera" default="true" />
+  <arg name="show_window" default="true" />
+  <arg name="camera_fps" default="30" />
+  <arg name="enable_b_dropper" default="false" />
+
+  <include file="$(find cuadc_control)/launch/semi_auto_drop_ground_test.launch">
+    <arg name="start_camera" value="$(arg start_camera)" />
+    <arg name="show_window" value="$(arg show_window)" />
+    <arg name="camera_fps" value="$(arg camera_fps)" />
+    <arg name="enable_b_dropper" value="$(arg enable_b_dropper)" />
+    <arg name="dry_run" value="false" />
+    <arg name="auto_start_servo_test" value="true" />
+    <arg name="close_after_drop" value="true" />
+    <arg name="require_disarmed_ground_test" value="true" />
+    <arg name="close_delay_s" value="1.0" />
+    <arg name="post_drop_display_s" value="3.0" />
+    <arg name="align_threshold_m" value="0.02" />
+    <arg name="stable_time_s" value="2.0" />
+    <arg name="lost_frame_threshold" value="10" />
+    <arg name="target_reacquire_timeout_s" value="4.0" />
+  </include>
+</launch>

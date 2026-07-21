@@ -1,0 +1,10 @@
+<launch>
+  <!-- 启动检测节点与自动抛投节点示例 -->
+  <node pkg="cuadc_vision" type="detector_node.py" name="detector_node" output="screen" />
+  <node pkg="cuadc_vision" type="auto_drop_node.py" name="auto_drop_node" output="screen">
+    <!-- 参数示例，可在 launch 中调整 -->
+    <param name="pixel_threshold" value="20.0" />
+    <param name="min_conf" value="0.5" />
+    <param name="channel" value="9" />
+  </node>
+</launch>

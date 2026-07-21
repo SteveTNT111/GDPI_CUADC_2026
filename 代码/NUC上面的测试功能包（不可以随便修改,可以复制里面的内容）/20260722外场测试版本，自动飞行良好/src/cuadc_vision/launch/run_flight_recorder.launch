@@ -1,0 +1,87 @@
+<launch>
+  <!--
+    run_flight_recorder.launch — CUADC 2026 飞行数据录像启动文件
+
+    功能：
+      在飞控解锁后自动开始录像，画面叠加飞行数据（高度、GPS、电压等），
+      上锁后自动停止。同时输出 .avi 视频 + .csv 数据记录。
+
+      用于判断：
+        - 不同高度下相机拍摄到的地面范围
+        - 什么高度识别圆筒效果最好
+        - 什么高度能最短时间覆盖侦察区全部圆筒
+        → 为航线高度规划提供实测数据
+
+    运行方式：
+      roslaunch cuadc_vision run_flight_recorder.launch
+      roslaunch cuadc_vision run_flight_recorder.launch show_window:=true
+      roslaunch cuadc_vision run_flight_recorder.launch record_immediately:=true
+  -->
+
+  <!-- ==================== 图像源 ==================== -->
+  <arg name="image_topic" default="/d435i/color/image_raw" />
+  <arg name="camera_fps" default="30" />
+
+  <!-- ==================== MAVROS 话题 ==================== -->
+  <arg name="state_topic" default="/mavros/state" />
+  <arg name="global_position_topic" default="/mavros/global_position/global" />
+  <arg name="local_pose_topic" default="/mavros/local_position/pose" />
+  <arg name="rel_alt_topic" default="/mavros/global_position/rel_alt" />
+  <arg name="battery_topic" default="/mavros/battery" />
+
+  <!-- ==================== 录像参数 ==================== -->
+  <arg name="output_dir" default="$(env HOME)/cuadc_flight_videos" />
+  <arg name="video_fps" default="30.0" />
+  <arg name="codec" default="MJPG" />
+  <arg name="file_prefix" default="cuadc_flight" />
+
+  <!-- ==================== 叠加显示参数 ==================== -->
+  <arg name="overlay_scale" default="0.55" />
+  <arg name="overlay_thickness" default="2" />
+  <arg name="show_window" default="false" />
+
+  <!-- ==================== 控制参数 ==================== -->
+  <arg name="record_immediately" default="false" />
+  <arg name="stop_on_disarm" default="true" />
+  <arg name="write_csv" default="true" />
+
+  <!-- ==================== 先启动 D435i 相机（如果还没跑的话） ==================== -->
+  <node pkg="cuadc_vision"
+        type="camera_node.py"
+        name="camera_node"
+        output="screen">
+    <param name="fps" value="$(arg camera_fps)" />
+  </node>
+
+  <!-- ==================== 飞行数据录像节点 ==================== -->
+  <node pkg="cuadc_vision"
+        type="flight_data_video_recorder_node.py"
+        name="flight_data_video_recorder_node"
+        output="screen">
+    <!-- 图像源 -->
+    <param name="image_topic" value="$(arg image_topic)" />
+
+    <!-- MAVROS 数据 -->
+    <param name="state_topic" value="$(arg state_topic)" />
+    <param name="global_position_topic" value="$(arg global_position_topic)" />
+    <param name="local_pose_topic" value="$(arg local_pose_topic)" />
+    <param name="rel_alt_topic" value="$(arg rel_alt_topic)" />
+    <param name="battery_topic" value="$(arg battery_topic)" />
+
+    <!-- 录像 -->
+    <param name="output_dir" value="$(arg output_dir)" />
+    <param name="video_fps" value="$(arg video_fps)" />
+    <param name="codec" value="$(arg codec)" />
+    <param name="file_prefix" value="$(arg file_prefix)" />
+
+    <!-- 叠加显示 -->
+    <param name="overlay_scale" value="$(arg overlay_scale)" />
+    <param name="overlay_thickness" value="$(arg overlay_thickness)" />
+    <param name="show_window" value="$(arg show_window)" />
+
+    <!-- 控制 -->
+    <param name="record_immediately" value="$(arg record_immediately)" />
+    <param name="stop_on_disarm" value="$(arg stop_on_disarm)" />
+    <param name="write_csv" value="$(arg write_csv)" />
+  </node>
+</launch>

@@ -1,0 +1,18 @@
+<launch>
+  <arg name="takeoff_altitude" default="3.0" />
+  <arg name="hover_mode" default="LOITER" />
+  <arg name="auto_start_mavros" default="true" />
+  <arg name="fcu_url" default="/dev/ttyACM0:115200" />
+  <arg name="monitor_after_loiter" default="true" />
+
+  <node pkg="cuadc_control"
+        type="one_key_takeoff.py"
+        name="one_key_takeoff"
+        output="screen">
+    <param name="takeoff_altitude" value="$(arg takeoff_altitude)" />
+    <param name="hover_mode" value="$(arg hover_mode)" />
+    <param name="auto_start_mavros" value="$(arg auto_start_mavros)" />
+    <param name="mavros_fcu_url" value="$(arg fcu_url)" />
+    <param name="monitor_after_loiter" value="$(arg monitor_after_loiter)" />
+  </node>
+</launch>

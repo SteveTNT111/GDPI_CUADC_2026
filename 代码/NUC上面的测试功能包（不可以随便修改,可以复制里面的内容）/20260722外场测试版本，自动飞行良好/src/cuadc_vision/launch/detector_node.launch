@@ -1,0 +1,105 @@
+<launch>
+  <!--
+    detector_node.launch — YOLO 目标检测
+
+    功能：启动 D435i 相机 + YOLO 检测，弹出 OpenCV 窗口显示标注画面。
+    旧版视觉代码功能移植：camera + detector 一体化启动。
+
+    运行方式：
+      roslaunch cuadc_vision detector_node.launch
+      roslaunch cuadc_vision detector_node.launch yolo_device:=cuda:0
+      roslaunch cuadc_vision detector_node.launch night_mode:=true
+  -->
+
+  <!-- 相机参数 -->
+  <arg name="fps" default="30" />
+  <!-- 已有 /camera_node 时可设为 false，避免重复打开 D435i。 -->
+  <arg name="start_camera" default="true" />
+  <!-- 夜间模式：固定曝光/增益/白平衡 + 50Hz 防频闪，并增强 YOLO 输入亮度。 -->
+  <arg name="night_mode" default="false" />
+  <!-- exposure_us <= 0 时使用自动曝光；固定曝光更不容易在灯光下明暗抽动。 -->
+  <arg name="night_exposure_us" default="10000" />
+  <arg name="night_gain" default="64" />
+  <!-- white_balance <= 0 时使用自动白平衡。 -->
+  <arg name="night_white_balance" default="4500" />
+  <!-- RealSense: 1=50Hz, 2=60Hz；中国场地使用 1。 -->
+  <arg name="night_power_line_frequency" default="1" />
+
+  <!-- 相机安装外参：相机在机体重心正下方，镜头朝下，相机顶部朝机体前方 -->
+  <!-- camera_mount_z: 相机光学中心到机体 CG 的竖直距离 (m)，机体 Z+ 为下，所以正值=在 CG 下方 -->
+  <arg name="camera_mount_z" default="0.40" />
+  <arg name="dropper_a_forward_offset_m" default="0.05" />
+  <arg name="dropper_b_forward_offset_m" default="-0.05" />
+  <!-- 2026-07-19 真机标定：+1=保持机体右轴；不要改成 -1，除非重新完成方向测试。 -->
+  <arg name="local_pose_right_sign" default="1.0" />
+
+  <!-- YOLO 参数 -->
+  <arg name="yolo_model_path" default="$(find cuadc_vision)/models/best.onnx" />
+  <arg name="yolo_device" default="cpu" />
+  <arg name="yolo_conf_threshold" default="0.6" />
+  <arg name="night_conf_threshold" default="0.50" />
+  <!-- gamma < 1 提亮暗部；CLAHE 提升局部对比度。 -->
+  <arg name="night_gamma" default="0.75" />
+  <arg name="night_clahe_clip_limit" default="2.0" />
+  <arg name="night_clahe_grid_size" default="8" />
+  <arg name="show_window" default="false" />
+  <arg name="yolo_class_names" default="cylinder" />
+  <arg name="yolo_target_classes" default="cylinder" />
+  <arg name="yolo_cv_threads" default="1" />
+  <arg name="yolo_omp_threads" default="8" />
+
+  <!-- 相机驱动 -->
+  <group if="$(arg start_camera)">
+    <node pkg="cuadc_vision"
+          type="camera_node.py"
+          name="camera_node"
+          output="screen">
+      <param name="fps" value="$(arg fps)" />
+      <param name="night_mode" value="$(arg night_mode)" />
+      <param name="night_exposure_us" value="$(arg night_exposure_us)" />
+      <param name="night_gain" value="$(arg night_gain)" />
+      <param name="night_white_balance" value="$(arg night_white_balance)" />
+      <param name="night_power_line_frequency" value="$(arg night_power_line_frequency)" />
+    </node>
+  </group>
+
+  <!-- ==================== 相机→机体 TF 静态变换 ==================== -->
+  <!--
+    相机安装方式：D435i 在机体重心正下方，镜头朝下，相机顶部(USB口)朝向机体前方。
+    坐标映射：X_cam(右)→Y_body(右), Y_cam(下)→-X_body(后), Z_cam(光轴)→Z_body(下)
+    旋转：绕 Z 轴 +90° (yaw=1.5708 rad)
+    平移：(0, 0, camera_mount_z) — 相机位于 CG 正下方
+    若无此行，detector_node 的底部坐标栏 BUCKET NED 将始终显示 (tf failed)。
+  -->
+  <node pkg="tf2_ros" type="static_transform_publisher"
+        name="camera_to_body_tf"
+        args="0 0 $(arg camera_mount_z) 0 0 0.7071068 0.7071068 base_link d435i_color_optical_frame" />
+
+  <!-- YOLO 检测（带 OpenCV 窗口） -->
+  <node pkg="cuadc_vision"
+        type="detector_node.py"
+        name="detector_node"
+        output="screen">
+    <env name="ULTRALYTICS_SKIP_REQUIREMENTS_CHECKS" value="1" />
+    <env name="OMP_NUM_THREADS" value="$(arg yolo_omp_threads)" />
+    <env name="MKL_NUM_THREADS" value="$(arg yolo_omp_threads)" />
+    <env name="OMP_WAIT_POLICY" value="PASSIVE" />
+    <env name="OMP_PROC_BIND" value="FALSE" />
+    <param name="model_path" value="$(arg yolo_model_path)" />
+    <param name="device" value="$(arg yolo_device)" />
+    <param name="conf_threshold" value="$(arg yolo_conf_threshold)" />
+    <param name="night_mode" value="$(arg night_mode)" />
+    <param name="night_conf_threshold" value="$(arg night_conf_threshold)" />
+    <param name="night_gamma" value="$(arg night_gamma)" />
+    <param name="night_clahe_clip_limit" value="$(arg night_clahe_clip_limit)" />
+    <param name="night_clahe_grid_size" value="$(arg night_clahe_grid_size)" />
+    <param name="show_window" value="$(arg show_window)" />
+    <param name="class_names" value="$(arg yolo_class_names)" />
+    <param name="target_classes" value="$(arg yolo_target_classes)" />
+    <param name="cv_threads" value="$(arg yolo_cv_threads)" />
+    <param name="camera_mount_z" value="$(arg camera_mount_z)" />
+    <param name="dropper_a_forward_offset_m" value="$(arg dropper_a_forward_offset_m)" />
+    <param name="dropper_b_forward_offset_m" value="$(arg dropper_b_forward_offset_m)" />
+    <param name="local_pose_right_sign" value="$(arg local_pose_right_sign)" />
+  </node>
+</launch>

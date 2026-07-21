@@ -1,0 +1,8 @@
+prefix=/home/lab/catkin_ws/devel
+
+Name: pipe_hunting
+Description: Description of pipe_hunting
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

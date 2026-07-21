@@ -1,0 +1,78 @@
+<launch>
+  <!-- Safe by default: execute_mission=false and calibration_confirmed=false. -->
+  <arg name="execute_mission" default="false" />
+  <arg name="calibration_confirmed" default="false" />
+  <arg name="enable_servo_drop" default="false" />
+  <arg name="authorization_required" default="true" />
+  <arg name="authorization_phrase" default="FLY" />
+
+  <arg name="start_mavros" default="true" />
+  <arg name="start_vision" default="true" />
+  <arg name="fcu_url" default="/dev/ttyACM0:921600" />
+  <arg name="fps" default="30" />
+  <arg name="yolo_model_path" default="$(find cuadc_vision)/models/best.onnx" />
+  <arg name="yolo_device" default="cpu" />
+  <arg name="show_window" default="false" />
+
+  <!-- Aircraft-local mission axes: X right, Y forward, Z up. -->
+  <arg name="takeoff_altitude_m" default="2.5" />
+  <arg name="search_forward_distance_m" default="3.0" />
+  <arg name="search_forward_speed_mps" default="0.20" />
+  <arg name="aim_altitude_m" default="1.2" />
+  <arg name="rtl_climb_altitude_m" default="3.0" />
+  <arg name="b_forward_shift_m" default="0.08" />
+
+  <arg name="camera_down_m" default="0.40" />
+
+  <group if="$(arg start_mavros)">
+    <include file="$(find mavros)/launch/apm.launch">
+      <arg name="fcu_url" value="$(arg fcu_url)" />
+    </include>
+  </group>
+
+  <group if="$(arg start_vision)">
+    <node pkg="tf2_ros"
+          type="static_transform_publisher"
+          name="autonomous_mission_camera_to_body_tf"
+          args="0 0 $(arg camera_down_m) 0 0 0.7071068 0.7071068 base_link d435i_color_optical_frame" />
+
+    <node pkg="cuadc_vision" type="camera_node.py" name="camera_node" output="screen">
+      <param name="fps" value="$(arg fps)" />
+    </node>
+
+    <node pkg="cuadc_vision" type="detector_node.py" name="detector_node" output="screen">
+      <env name="ULTRALYTICS_SKIP_REQUIREMENTS_CHECKS" value="1" />
+      <param name="model_path" value="$(arg yolo_model_path)" />
+      <param name="device" value="$(arg yolo_device)" />
+      <param name="show_window" value="$(arg show_window)" />
+      <param name="auto_start_mavros" value="false" />
+      <param name="camera_mount_z" value="$(arg camera_down_m)" />
+      <param name="dropper_a_forward_offset_m" value="0.0" />
+      <param name="dropper_b_forward_offset_m" value="-0.08" />
+      <param name="class_names" value="bucket" />
+      <param name="target_classes" value="bucket,cylinder" />
+    </node>
+  </group>
+
+  <node pkg="cuadc_vision"
+        type="autonomous_two_drop_mission.py"
+        name="autonomous_two_drop_mission"
+        output="screen"
+        required="true">
+    <rosparam command="load"
+              file="$(find cuadc_vision)/autonomous_drop_mission/config/mission.yaml" />
+
+    <param name="execute_mission" value="$(arg execute_mission)" />
+    <param name="calibration_confirmed" value="$(arg calibration_confirmed)" />
+    <param name="enable_servo_drop" value="$(arg enable_servo_drop)" />
+    <param name="authorization_required" value="$(arg authorization_required)" />
+    <param name="authorization_phrase" value="$(arg authorization_phrase)" />
+    <param name="takeoff_altitude_m" value="$(arg takeoff_altitude_m)" />
+    <param name="search_forward_distance_m" value="$(arg search_forward_distance_m)" />
+    <param name="search_forward_speed_mps" value="$(arg search_forward_speed_mps)" />
+    <param name="aim_altitude_m" value="$(arg aim_altitude_m)" />
+    <param name="rtl_climb_altitude_m" value="$(arg rtl_climb_altitude_m)" />
+    <param name="b_forward_shift_m" value="$(arg b_forward_shift_m)" />
+    <param name="camera_down_m" value="$(arg camera_down_m)" />
+  </node>
+</launch>

@@ -1,0 +1,31 @@
+<launch>
+  <!--
+    camera_node.launch — D435i 相机驱动
+
+    功能：启动 D435i 相机，发布彩色图、深度图、相机内参。
+    配合 rviz 或 rqt_image_view 查看画面。
+
+    运行方式：
+      roslaunch cuadc_vision camera_node.launch
+      roslaunch cuadc_vision camera_node.launch fps:=15
+  -->
+
+  <arg name="fps" default="30" />
+  <arg name="night_mode" default="false" />
+  <arg name="night_exposure_us" default="10000" />
+  <arg name="night_gain" default="64" />
+  <arg name="night_white_balance" default="4500" />
+  <arg name="night_power_line_frequency" default="1" />
+
+  <node pkg="cuadc_vision"
+        type="camera_node.py"
+        name="camera_node"
+        output="screen">
+    <param name="fps" value="$(arg fps)" />
+    <param name="night_mode" value="$(arg night_mode)" />
+    <param name="night_exposure_us" value="$(arg night_exposure_us)" />
+    <param name="night_gain" value="$(arg night_gain)" />
+    <param name="night_white_balance" value="$(arg night_white_balance)" />
+    <param name="night_power_line_frequency" value="$(arg night_power_line_frequency)" />
+  </node>
+</launch>

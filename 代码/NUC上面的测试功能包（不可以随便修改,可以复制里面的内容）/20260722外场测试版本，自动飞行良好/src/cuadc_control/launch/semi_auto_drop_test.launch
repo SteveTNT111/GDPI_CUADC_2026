@@ -1,0 +1,113 @@
+<launch>
+  <!-- 飞手先手动解锁、起飞并保持 LOITER；本 launch 不启动起飞/解锁逻辑。 -->
+  <arg name="ground_test" default="false" />
+  <arg name="autonomous_mode" default="false" />
+  <arg name="enable_b_dropper" default="false" />
+  <arg name="align_threshold_m" default="0.15" />
+  <arg name="target_drop_height_m" default="1.5" />
+  <arg name="height_tolerance_m" default="0.15" />
+  <arg name="stable_time_s" default="1.0" />
+  <arg name="setpoint_interval_s" default="0.1" />
+  <arg name="after_a_delay_s" default="3.0" />
+  <arg name="auto_start_detector" default="true" />
+  <arg name="auto_start_servo_test" default="true" />
+  <arg name="close_after_drop" default="false" />
+  <arg name="dry_run" default="false" />
+  <arg name="min_bucket_count" default="1" />
+
+  <!-- 自主分层瞄准、目标滤波与丢失重捕获参数。 -->
+  <arg name="acquire_stable_time_s" default="0.8" />
+  <arg name="coarse_align_height_m" default="2.0" />
+  <arg name="fine_align_height_m" default="1.7" />
+  <arg name="coarse_align_threshold_m" default="0.45" />
+  <arg name="fine_align_threshold_m" default="0.20" />
+  <arg name="phase_stable_time_s" default="1.0" />
+  <arg name="target_filter_alpha" default="0.25" />
+  <arg name="max_target_jump_m" default="0.80" />
+  <arg name="brief_loss_s" default="0.5" />
+  <arg name="loss_hover_s" default="2.0" />
+  <arg name="reacquire_height_m" default="2.0" />
+  <arg name="search_start_radius_m" default="0.30" />
+  <arg name="search_radius_step_m" default="0.30" />
+  <arg name="search_max_radius_m" default="1.20" />
+  <arg name="search_dwell_s" default="1.5" />
+  <arg name="target_loss_timeout_s" default="30.0" />
+  <arg name="max_horizontal_setpoint_distance_m" default="0.60" />
+  <arg name="max_vertical_setpoint_distance_m" default="0.20" />
+  <arg name="max_horizontal_setpoint_rate_mps" default="0.25" />
+  <arg name="max_vertical_setpoint_rate_mps" default="0.20" />
+  <arg name="phase_max_horizontal_speed_mps" default="0.20" />
+  <arg name="phase_max_vertical_speed_mps" default="0.15" />
+  <arg name="max_horizontal_speed_mps" default="0.10" />
+  <arg name="max_vertical_speed_mps" default="0.10" />
+  <arg name="require_distinct_b_target" default="false" />
+  <arg name="distinct_target_distance_m" default="0.60" />
+
+  <arg name="aim_info_timeout_s" default="1.0" />
+  <arg name="state_timeout_s" default="2.0" />
+  <arg name="guided_state_grace_s" default="5.0" />
+  <arg name="diagnostic_log_interval_s" default="1.0" />
+  <arg name="connection_timeout_s" default="30.0" />
+  <arg name="mode_timeout_s" default="8.0" />
+  <arg name="servo_wait_timeout_s" default="20.0" />
+  <arg name="close_delay_s" default="0.8" />
+  <arg name="detector_package" default="cuadc_vision" />
+  <arg name="detector_launch" default="detector_node.launch" />
+
+  <node pkg="cuadc_control"
+        type="semi_auto_drop_test.py"
+        name="semi_auto_drop_test"
+        output="screen"
+        required="true">
+    <param name="ground_test" value="$(arg ground_test)" />
+    <param name="autonomous_mode" value="$(arg autonomous_mode)" />
+    <param name="enable_b_dropper" value="$(arg enable_b_dropper)" />
+    <param name="align_threshold_m" value="$(arg align_threshold_m)" />
+    <param name="target_drop_height_m" value="$(arg target_drop_height_m)" />
+    <param name="height_tolerance_m" value="$(arg height_tolerance_m)" />
+    <param name="stable_time_s" value="$(arg stable_time_s)" />
+    <param name="setpoint_interval_s" value="$(arg setpoint_interval_s)" />
+    <param name="after_a_delay_s" value="$(arg after_a_delay_s)" />
+    <param name="auto_start_detector" value="$(arg auto_start_detector)" />
+    <param name="auto_start_servo_test" value="$(arg auto_start_servo_test)" />
+    <param name="close_after_drop" value="$(arg close_after_drop)" />
+    <param name="dry_run" value="$(arg dry_run)" />
+    <param name="min_bucket_count" value="$(arg min_bucket_count)" />
+    <param name="acquire_stable_time_s" value="$(arg acquire_stable_time_s)" />
+    <param name="coarse_align_height_m" value="$(arg coarse_align_height_m)" />
+    <param name="fine_align_height_m" value="$(arg fine_align_height_m)" />
+    <param name="coarse_align_threshold_m" value="$(arg coarse_align_threshold_m)" />
+    <param name="fine_align_threshold_m" value="$(arg fine_align_threshold_m)" />
+    <param name="phase_stable_time_s" value="$(arg phase_stable_time_s)" />
+    <param name="target_filter_alpha" value="$(arg target_filter_alpha)" />
+    <param name="max_target_jump_m" value="$(arg max_target_jump_m)" />
+    <param name="brief_loss_s" value="$(arg brief_loss_s)" />
+    <param name="loss_hover_s" value="$(arg loss_hover_s)" />
+    <param name="reacquire_height_m" value="$(arg reacquire_height_m)" />
+    <param name="search_start_radius_m" value="$(arg search_start_radius_m)" />
+    <param name="search_radius_step_m" value="$(arg search_radius_step_m)" />
+    <param name="search_max_radius_m" value="$(arg search_max_radius_m)" />
+    <param name="search_dwell_s" value="$(arg search_dwell_s)" />
+    <param name="target_loss_timeout_s" value="$(arg target_loss_timeout_s)" />
+    <param name="max_horizontal_setpoint_distance_m" value="$(arg max_horizontal_setpoint_distance_m)" />
+    <param name="max_vertical_setpoint_distance_m" value="$(arg max_vertical_setpoint_distance_m)" />
+    <param name="max_horizontal_setpoint_rate_mps" value="$(arg max_horizontal_setpoint_rate_mps)" />
+    <param name="max_vertical_setpoint_rate_mps" value="$(arg max_vertical_setpoint_rate_mps)" />
+    <param name="phase_max_horizontal_speed_mps" value="$(arg phase_max_horizontal_speed_mps)" />
+    <param name="phase_max_vertical_speed_mps" value="$(arg phase_max_vertical_speed_mps)" />
+    <param name="max_horizontal_speed_mps" value="$(arg max_horizontal_speed_mps)" />
+    <param name="max_vertical_speed_mps" value="$(arg max_vertical_speed_mps)" />
+    <param name="require_distinct_b_target" value="$(arg require_distinct_b_target)" />
+    <param name="distinct_target_distance_m" value="$(arg distinct_target_distance_m)" />
+    <param name="aim_info_timeout_s" value="$(arg aim_info_timeout_s)" />
+    <param name="state_timeout_s" value="$(arg state_timeout_s)" />
+    <param name="guided_state_grace_s" value="$(arg guided_state_grace_s)" />
+    <param name="diagnostic_log_interval_s" value="$(arg diagnostic_log_interval_s)" />
+    <param name="connection_timeout_s" value="$(arg connection_timeout_s)" />
+    <param name="mode_timeout_s" value="$(arg mode_timeout_s)" />
+    <param name="servo_wait_timeout_s" value="$(arg servo_wait_timeout_s)" />
+    <param name="close_delay_s" value="$(arg close_delay_s)" />
+    <param name="detector_package" value="$(arg detector_package)" />
+    <param name="detector_launch" value="$(arg detector_launch)" />
+  </node>
+</launch>

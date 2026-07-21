@@ -1,0 +1,17 @@
+(cl:defpackage cuadc_vision-msg
+  (:use )
+  (:export
+   "<BUCKETAIMINFO>"
+   "BUCKETAIMINFO"
+   "<BUCKETINFO>"
+   "BUCKETINFO"
+   "<GEOTARGET>"
+   "GEOTARGET"
+   "<MISSIONSTATUS>"
+   "MISSIONSTATUS"
+   "<YOLODETECTION>"
+   "YOLODETECTION"
+   "<YOLODETECTIONS>"
+   "YOLODETECTIONS"
+  ))
+

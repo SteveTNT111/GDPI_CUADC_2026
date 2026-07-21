@@ -1,0 +1,8 @@
+prefix=/home/lab/GDPI_CUADC_2026/代码/LSY/catkin_ws/devel_lsy
+
+Name: cuadc_control
+Description: Description of cuadc_control
+Version: 1.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: rospy geometry_msgs mavros_msgs sensor_msgs std_msgs cuadc_vision

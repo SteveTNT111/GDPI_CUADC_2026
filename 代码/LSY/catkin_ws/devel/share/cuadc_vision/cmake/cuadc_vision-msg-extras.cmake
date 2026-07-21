@@ -1,0 +1,2 @@
+set(cuadc_vision_MESSAGE_FILES "/home/lab/GDPI_CUADC_2026/代码/LSY/catkin_ws/src/cuadc_vision/msg/YoloDetection.msg;/home/lab/GDPI_CUADC_2026/代码/LSY/catkin_ws/src/cuadc_vision/msg/YoloDetections.msg;/home/lab/GDPI_CUADC_2026/代码/LSY/catkin_ws/src/cuadc_vision/msg/GeoTarget.msg;/home/lab/GDPI_CUADC_2026/代码/LSY/catkin_ws/src/cuadc_vision/msg/BucketInfo.msg;/home/lab/GDPI_CUADC_2026/代码/LSY/catkin_ws/src/cuadc_vision/msg/BucketAimInfo.msg;/home/lab/GDPI_CUADC_2026/代码/LSY/catkin_ws/src/cuadc_vision/msg/MissionStatus.msg")
+set(cuadc_vision_SERVICE_FILES "")

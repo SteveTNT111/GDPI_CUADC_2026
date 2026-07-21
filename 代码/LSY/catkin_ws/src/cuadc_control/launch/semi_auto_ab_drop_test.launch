@@ -1,0 +1,50 @@
+<launch>
+  <!--
+    空中 A+B 半自动投放：
+    飞手手动解锁、起飞并保持 LOITER，操作者按 Enter 后只进入一次 GUIDED。
+    接管后锁定当前高度/航向，仅以 0.05m/s 水平对中。
+    程序依次完成 A 和 B，两个都投放后才切回 LOITER。
+    默认 dry_run=true 且不启动舵机节点，第一次空中测试不发送真实舵机命令。
+  -->
+  <arg name="dry_run" default="true" />
+  <arg name="auto_start_detector" default="true" />
+  <arg name="auto_start_servo_test" default="false" />
+  <arg name="close_after_drop" default="true" />
+  <arg name="align_threshold_m" default="0.15" />
+  <arg name="target_drop_height_m" default="1.5" />
+  <arg name="height_tolerance_m" default="0.15" />
+  <arg name="stable_time_s" default="2.0" />
+  <arg name="after_a_delay_s" default="3.0" />
+  <arg name="lost_frame_threshold" default="10" />
+  <arg name="target_reacquire_timeout_s" default="4.0" />
+  <arg name="setpoint_interval_s" default="0.1" />
+  <arg name="max_horizontal_speed_mps" default="0.05" />
+  <arg name="max_target_offset_m" default="2.0" />
+  <arg name="max_surface_z_drift_m" default="0.50" />
+  <arg name="lateral_divergence_growth_m" default="0.10" />
+  <arg name="lateral_divergence_window_s" default="3.0" />
+  <arg name="command_error_buffer_m" default="0.03" />
+
+  <include file="$(find cuadc_control)/launch/semi_auto_drop_test.launch">
+    <arg name="ground_test" value="false" />
+    <arg name="enable_b_dropper" value="true" />
+    <arg name="dry_run" value="$(arg dry_run)" />
+    <arg name="auto_start_detector" value="$(arg auto_start_detector)" />
+    <arg name="auto_start_servo_test" value="$(arg auto_start_servo_test)" />
+    <arg name="close_after_drop" value="$(arg close_after_drop)" />
+    <arg name="align_threshold_m" value="$(arg align_threshold_m)" />
+    <arg name="target_drop_height_m" value="$(arg target_drop_height_m)" />
+    <arg name="height_tolerance_m" value="$(arg height_tolerance_m)" />
+    <arg name="stable_time_s" value="$(arg stable_time_s)" />
+    <arg name="after_a_delay_s" value="$(arg after_a_delay_s)" />
+    <arg name="lost_frame_threshold" value="$(arg lost_frame_threshold)" />
+    <arg name="target_reacquire_timeout_s" value="$(arg target_reacquire_timeout_s)" />
+    <arg name="setpoint_interval_s" value="$(arg setpoint_interval_s)" />
+    <arg name="max_horizontal_speed_mps" value="$(arg max_horizontal_speed_mps)" />
+    <arg name="max_target_offset_m" value="$(arg max_target_offset_m)" />
+    <arg name="max_surface_z_drift_m" value="$(arg max_surface_z_drift_m)" />
+    <arg name="lateral_divergence_growth_m" value="$(arg lateral_divergence_growth_m)" />
+    <arg name="lateral_divergence_window_s" value="$(arg lateral_divergence_window_s)" />
+    <arg name="command_error_buffer_m" value="$(arg command_error_buffer_m)" />
+  </include>
+</launch>
