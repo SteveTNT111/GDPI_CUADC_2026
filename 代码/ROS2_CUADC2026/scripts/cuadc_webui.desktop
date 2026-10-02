@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=CUADC 控制台 (Web UI)
+Comment=本地 Web UI：改参数/点按钮 → 飞机按配置跑
+Exec=bash -lc '"$HOME/ROS2_CUADC2026/scripts/webui_up.sh"'
+Path=/home/lab/ROS2_CUADC2026
+Terminal=false
+Icon=applications-internet
+Categories=Utility;
+StartupNotify=false

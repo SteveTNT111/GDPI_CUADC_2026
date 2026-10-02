@@ -1,0 +1,15 @@
+# SITL 油门居中（A3 LOITER 悬停）支持参数
+#
+# 背景：ArduPilot SITL 的 UDP RC 后端在没有外部 RC 包时，会以 50Hz 合成一组
+#       硬编码默认值 [1500,1500,1000,1500,1800,1000,1000,1800]，其中通道 3
+#       （油门）恒为 1000（最低位）。GUIDED 忽略油门故一键起飞正常，但 LOITER
+#       用油门控制升降 -> 持续下沉。
+#
+# PILOT_THR_BHV=1 (THR_BEHAVE_FEEDBACK_FROM_MID_STICK) 声明"自回中油门"：
+#   1) Copter 跳过 "Throttle (RC3) is not neutral" 解锁检查
+#      （见 RC_Channels_Copter::arming_check_throttle）；
+#   2) 摇杆中位 = 悬停，配合 sitl_rc_center.py 注入的 ch3=1500，
+#      LOITER 稳定悬停。
+#
+# 配套：sitl_rc_center.py --fixed 1500（restart_sim.sh 会自动启动）。
+PILOT_THR_BHV 1

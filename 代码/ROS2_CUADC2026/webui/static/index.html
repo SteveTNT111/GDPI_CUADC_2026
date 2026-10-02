@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CUADC 全流程任务控制台</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/theme.css"><!-- 科幻 HUD 皮肤；删掉本行即回退原样式 -->
+</head>
+<body>
+<header>
+  <div class="brand-block">
+    <h1>CUADC多旋翼无人机侦察与救援赛项 · 全流程任务控制台</h1>
+    <p class="brand-meta">GDPI/UCES&nbsp;&nbsp;FEK-104</p>
+    <p class="brand-slogans">
+      <span>[穷究原理，洞悉本质]</span>
+      <span>[七分钟飞驰，来源于七千次尝试]</span>
+      <span>[初心高于胜负，成长胜于输赢]</span>
+    </p>
+    <p class="brand-date">2026.10.6 自贡见</p>
+  </div>
+  <!-- 右上角：三个圆形按钮（一键启动任务依赖；仿真/真机各一键，无需再选链路） -->
+  <div class="top-actions">
+    <span id="launch-message" class="muted"></span>
+    <button id="btn-start-sim" class="round-btn sim" title="启动仿真 MAVROS（含相机/识别/舵机依赖）">仿真</button>
+    <button id="btn-start-real" class="round-btn real" title="启动真机 MAVROS（含相机/识别/舵机依赖）">真机</button>
+    <button id="btn-stop-mavros" class="round-btn stop" title="关闭所有 MAVROS（仿真+真机）">关闭</button>
+  </div>
+</header>
+<main>
+  <div class="top-row">
+  <!-- 实时任务日志 -->
+  <section class="card live-card">
+    <div class="section-head">
+      <div><h2>实时任务日志</h2><p class="muted">任务输出同步到这里（<code>/tmp/opencode/webui_mission.log</code>）。</p></div>
+      <div class="log-controls">
+        <label>日志源<select id="log-name"></select></label>
+        <label><input type="checkbox" id="log-auto" checked> 自动刷新</label>
+        <button id="log-copy">一键复制</button>
+        <button id="log-clear">清空面板</button>
+        <button id="log-refresh">刷新</button>
+      </div>
+    </div>
+    <pre id="log-view">（暂无日志：任务启动后自动出现）</pre>
+  </section>
+
+  <!-- 飞机状态栏（已与识别画面调换） -->
+  <section class="card fc-card">
+    <div class="section-head">
+      <div><h2>飞机状态栏</h2><p class="muted">来自 <code>/mavros</code>：state / rel_alt / local_position / battery / global_position。</p></div>
+      <span id="fc-state" class="state"></span>
+    </div>
+    <div id="fc-bar" class="kv fc-lines"></div>
+  </section>
+  </div>
+
+  <!-- 左：识别画面（紧邻下方"桶坐标/大小"便于对照）；右：任务控制 + 舵机测试 -->
+  <div class="fc-row">
+  <section class="card video-card">
+    <div class="section-head">
+      <div><h2>识别画面（带标注）</h2><p class="muted">识别框 + 红中心点 + 相机系 XY 轴 + 前/后准星（前=上、后=下，随深度投影）。</p></div>
+      <div class="log-controls"><span id="video-state" class="state">未打开</span><button id="video-toggle">打开画面</button></div>
+    </div>
+    <div class="video-wrap"><img id="live-view" alt="识别画面"></div>
+  </section>
+
+  <div class="right-stack">
+    <!-- 任务控制：原「启动依赖」按钮位置 -->
+    <section class="card mission-card">
+      <div class="section-head">
+        <div><h2>任务控制</h2><p class="muted">启动全流程 / Enter 授权 / 停止；依赖与收尾参数在下方（默认折叠）。</p></div>
+        <span id="mission-state" class="state">任务未启动</span>
+      </div>
+      <div class="cmd-bar">
+        <button id="mission-start" class="primary">启动全流程</button>
+        <button id="mission-confirm">Enter 确认（授权起飞）</button>
+        <button id="mission-stop">停止任务</button>
+        <span class="cmd-spacer"></span>
+        <button id="reload">重新读取参数</button>
+        <button id="save">保存全部参数</button>
+      </div>
+      <div class="cmd-bar">
+        <button id="sim-up">一键启动仿真</button>
+        <button id="kill-sim" class="danger">一键杀后台进程</button>
+        <span class="muted">清场+拉起仿真 / 只清场（不含 WebUI 服务）</span>
+      </div>
+      <!-- 「① 依赖自启 / 收尾（环境）」挂这里，默认折叠 -->
+      <div id="launch-config"></div>
+    </section>
+
+    <!-- 舵机测试（原「启动全流程」位置） -->
+    <section class="card servo-card">
+      <div class="section-head">
+        <div><h2>舵机测试（A/B 抛投器）</h2><p class="muted">需要真机 MAVROS；只开舵机脚本、未开真机 MAVROS 会提示操作者。</p></div>
+        <div class="log-controls">
+          <span id="servo-script-state" class="state">舵机测试脚本：未开启</span>
+          <span id="servo-mavros-state" class="state">真机 MAVROS：未连接</span>
+        </div>
+      </div>
+      <div class="cmd-bar">
+        <button id="servo-start" class="primary">启动舵机测试脚本</button>
+        <button id="servo-status">状态</button>
+        <button id="servo-all-off">A/B 全部关闭</button>
+      </div>
+      <div class="cmd-bar">
+        <button id="servo-a-on" class="ab a">A 打开</button>
+        <button id="servo-a-off" class="ab a">A 关闭</button>
+        <button id="servo-b-on" class="ab b">B 打开</button>
+        <button id="servo-b-off" class="ab b">B 关闭</button>
+      </div>
+      <p id="servo-msg" class="muted"></p>
+      <!-- 舵机参数（PWM/通道/使能）：默认折叠 -->
+      <div id="servo-config"></div>
+    </section>
+  </div>
+  </div>
+
+  <!-- 桶：实时识别 + 脚本锁定记录（合并一栏） -->
+  <section class="card bucket-card">
+    <div class="section-head">
+      <div><h2>桶坐标 / 大小</h2><p class="muted">上半＝识别节点<b>实时</b>输出（编号 1/2/3，相机系 / NED / WGS84 各含 前(+5cm)/后(-5cm)）；下半＝全自动脚本搜索后<b>锁定/记录</b>（读 <code>logs/buckets</code>，含选中两个与历史）。</p></div>
+      <div class="log-controls"><label>记录文件<select id="bucket-file"></select></label><span id="bucket-time" class="state"></span></div>
+    </div>
+    <div class="subhead">实时识别（编号 1/2/3；相机系 x,y 即"相对对应准星的差值"）</div>
+    <table class="tbl" id="live-bucket-table">
+      <thead><tr><th>位</th><th>相机系 (x,y,z) m</th><th>NED (N,E,D) m</th><th>WGS84 (lat,lon,alt)</th><th>距飞机 (m)</th></tr></thead>
+      <tbody><tr class="empty-row"><td colspan="5">暂无识别目标</td></tr></tbody>
+    </table>
+    <div class="subhead">脚本锁定 / 记录</div>
+    <div id="bucket-summary" class="kv"></div>
+    <div id="bucket-zones" class="kv"></div>
+    <table class="tbl" id="bucket-table">
+      <thead><tr>
+        <th>桶</th><th>WGS84 (lat, lon)</th><th>比值</th>
+        <th>大小档 / 估计直径 (150/200/250 mm)</th><th>距飞机 (m)</th><th>观测数</th><th>更新时间</th>
+      </tr></thead>
+      <tbody><tr class="empty-row"><td colspan="7">暂无记录</td></tr></tbody>
+    </table>
+    <div id="bucket-notes" class="kv"></div>
+  </section>
+
+  <!-- 测试流程：3 个"全自动任务"大步骤 -->
+  <section class="card workflow">
+    <h2>测试流程（3 大步）</h2>
+    <p class="muted">点「载入本步默认参数」写入该步建议值，再按「保存全部参数」。①② 的模式开关互斥（开一个会自动关另一个）。未选择的参数保持当前值。</p>
+    <div id="flows" class="flow-grid"></div>
+  </section>
+
+  <!-- 参数：按"飞行流程步骤"排布，每张卡片可折叠 -->
+  <section class="card">
+    <div class="section-head"><div><h2>参数（按飞行流程步骤）</h2><p class="muted">每张卡片对应一个飞行步骤，点击标题可折叠/展开；带“启动相关”的参数也会写入同一份 YAML。</p></div><span id="config-state" class="state">读取中…</span></div>
+    <div class="config-layout">
+      <nav id="config-nav" class="config-nav"></nav>
+      <div id="config" class="config-grid"></div>
+    </div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
