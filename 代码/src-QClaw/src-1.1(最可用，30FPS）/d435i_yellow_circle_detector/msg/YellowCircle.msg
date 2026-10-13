@@ -1,9 +1,0 @@
-Header header
-bool detected
-int32 x
-int32 y
-float32 radius
-float32 area
-float32 depth_m
-float32 center_offset_x
-float32 center_offset_y
